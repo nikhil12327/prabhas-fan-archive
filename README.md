@@ -115,7 +115,9 @@ ignored, stock limits are enforced, shipping thresholds apply, references match
    and a five-product starter catalogue.
 2. **Vercel** — import the GitHub repository. The build command
    (`node scripts/build-config.mjs`) and output directory (`public`) are
-   already in `vercel.json`.
+   already in `vercel.json`. Once the project is Git-connected with `main` as
+   the production branch, every push to `main` builds and deploys itself, so
+   there is no separate deploy step to forget.
 3. **Environment variables** — set every name from `.env.example`. With a
    Vercel token in scope, `node scripts/set-vercel-env.mjs` pushes them all,
    marking the four secrets as sensitive so Vercel never returns their values.

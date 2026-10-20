@@ -136,6 +136,8 @@ const cfg=window.__ARCHIVE_CONFIG__||{};
 const ONLINE=Boolean(cfg.enabled&&window.supabase);
 const db=ONLINE?window.supabase.createClient(cfg.supabaseUrl,cfg.anonKey):null;
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// supabase-js v2 returns {data:{publicUrl}}; older builds return {publicUrl}.
+const pubUrl=(bucket,path)=>{const r=db.storage.from(bucket).getPublicUrl(path||'');return (r&&r.data&&r.data.publicUrl)||(r&&r.publicUrl)||''};
 const inr=p=>'₹'+(p/100).toLocaleString('en-IN',{maximumFractionDigits:2});
 const when=iso=>new Date(iso).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 function flash(el,t,k){el.textContent=t;el.className='msg '+(k||'ok');el.hidden=false}
@@ -219,7 +221,7 @@ async function loadSubs(){
   if(!data.length)return box.innerHTML='<p class="empty">Nothing waiting for review.</p>';
   box.innerHTML=data.map(p=>`
     <div class="card">
-      <img class="thumb" src="${db.storage.from('submissions').getPublicUrl(p.storage_path).publicUrl}" alt="" loading="lazy">
+      <img class="thumb" src="${pubUrl('submissions',p.storage_path)}" alt="" loading="lazy">
       <p class="meta"><b>${esc(p.name)}</b> · ${esc(p.email)}<br>${p.caption?esc(p.caption)+'<br>':''}${when(p.created_at)}</p>
       <div class="row">
         <button class="btn go sm" data-act="approve" data-id="${p.id}">Approve</button>

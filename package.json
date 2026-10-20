@@ -15,5 +15,8 @@
     "serve": "node scripts/serve.mjs",
     "test": "node scripts/test-orders.mjs",
     "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "vercel": "^64.7.0"
   }
 }

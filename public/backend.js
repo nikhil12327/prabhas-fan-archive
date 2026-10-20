@@ -21,6 +21,12 @@
   const shortDate = iso => new Date(iso).toLocaleDateString('en-IN',
     { day: 'numeric', month: 'short', year: 'numeric' });
 
+  /** supabase-js v2 returns {data:{publicUrl}}; older builds return {publicUrl}. */
+  function pubUrl(bucket, path) {
+    const r = db.storage.from(bucket).getPublicUrl(path || '');
+    return (r && r.data && r.data.publicUrl) || (r && r.publicUrl) || '';
+  }
+
   function flash(el, msg, kind) {
     if (!el) return;
     el.textContent = msg;
@@ -59,7 +65,7 @@
       grid.innerHTML = data.length
         ? data.map(p => `
           <figure class="pwcard">
-            <img src="${db.storage.from('wall').getPublicUrl(p.wall_path).publicUrl}"
+            <img src="${pubUrl('wall', p.wall_path)}"
                  alt="Photo submitted by ${esc(p.name)}" loading="lazy">
             <figcaption>${p.caption ? esc(p.caption) : ''}<span>${esc(p.name)}</span></figcaption>
           </figure>`).join('')
@@ -265,7 +271,7 @@
 
     grid.innerHTML = PRODUCTS.map(p => {
       const img = p.image_path
-        ? `<div class="im" style="background-image:url(${db.storage.from('merch').getPublicUrl(p.image_path).publicUrl})"></div>`
+        ? `<div class="im" style="background-image:url('${pubUrl('merch', p.image_path)}')"></div>`
         : '<div class="im"></div>';
       const stock = p.stock != null && p.stock <= 0;
       return `<article class="mi rv in" data-p="${p.id}">

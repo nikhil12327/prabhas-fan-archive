@@ -5,6 +5,9 @@ records, a fan quiz, a moderated photo wall, a birthday countdown and a small
 merch shop. A single-file archive site rebuilt as a deployable full-stack
 project: static frontend, Supabase backend, Vercel serverless functions.
 
+**Live:** [prabhas-fan-archive.vercel.app](https://prabhas-fan-archive.vercel.app)
+· **Owner dashboard:** [/admin](https://prabhas-fan-archive.vercel.app/admin)
+
 > Not affiliated with Prabhas, his management, production companies or film
 > studios. Photographs are shown for fan commentary; all rights remain with
 > their owners.
@@ -37,7 +40,7 @@ public/            static site (Vercel serves this verbatim)
   config.js        GENERATED at build — carries only the public anon key
   images/          81 film photographs, 24 of 26 films
 
-api/               Vercel serverless functions (Node 20)
+api/               Vercel serverless functions (Node 24)
   orders.js            create an order — prices re-read from the database
   stripe-webhook.js    flip an order to paid on Stripe confirmation
   moderate.js          approve/reject a submission, moving the storage file
@@ -113,10 +116,15 @@ ignored, stock limits are enforced, shipping thresholds apply, references match
 2. **Vercel** — import the GitHub repository. The build command
    (`node scripts/build-config.mjs`) and output directory (`public`) are
    already in `vercel.json`.
-3. **Environment variables** — set every name from `.env.example`.
+3. **Environment variables** — set every name from `.env.example`. With a
+   Vercel token in scope, `node scripts/set-vercel-env.mjs` pushes them all,
+   marking the four secrets as sensitive so Vercel never returns their values.
+   `SITE_URL` is the stable production alias; without it the functions fall
+   back to `VERCEL_URL`, so nothing breaks before the first deploy.
 4. **Stripe** — add a webhook pointing at `/api/stripe-webhook` with events
    `checkout.session.completed`, and put its signing secret in
-   `STRIPE_WEBHOOK_SECRET`.
+   `STRIPE_WEBHOOK_SECRET`. Registering it over the API returns that secret in
+   the response, which is the least error-prone way to obtain it.
 5. **Owner account** — visit `/admin/`, create the owner account, confirm it in
    Supabase → Authentication, then insert your user id into `public.admins`.
 

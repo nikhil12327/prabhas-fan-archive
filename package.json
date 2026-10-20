@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Prabhas — The Fan Archive. Static site with Supabase backend, merch orders and Vercel deployment.",
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "vercel dev",

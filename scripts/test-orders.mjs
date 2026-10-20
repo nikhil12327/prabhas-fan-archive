@@ -9,6 +9,11 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
 process.env.SUPABASE_ANON_KEY = 'anon-test-key';
 process.env.OWNER_EMAIL = 'owner@example.com';
 process.env.SHIPPING_PAISE = '7900';
+// Hermetic: sourcing .env.local exports real keys into the shell, and a leaked
+// STRIPE_SECRET_KEY would silently turn the "not configured" test into a live
+// Stripe call. Clear them so the assertions hold regardless of the environment.
+delete process.env.STRIPE_SECRET_KEY;
+delete process.env.STRIPE_WEBHOOK_SECRET;
 process.env.RESEND_API_KEY = 're_test_key'; // makes sendEmail take the real path (mocked below)
 
 const { default: handler } = await import('../api/orders.js');

@@ -1,0 +1,9 @@
+# Not part of the deployment. Vercel serves only `public/` (see vercel.json),
+# and builds config.js from the environment variables set in the dashboard.
+node_modules/
+.logs/
+screenshots/
+.env
+.env.*
+.vercel/
+.git/

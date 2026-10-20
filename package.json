@@ -1,0 +1,19 @@
+{
+  "name": "prabhas-fan-archive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Prabhas — The Fan Archive. Static site with Supabase backend, merch orders and Vercel deployment.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "wire-images": "node scripts/wire-images.mjs",
+    "config": "node scripts/build-config.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "node scripts/test-orders.mjs",
+    "check": "node scripts/check.mjs"
+  }
+}

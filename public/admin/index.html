@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Owner — Prabhas Fan Archive</title>
+<script src="/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root{
+  --bg:#0b0b0e;--ch:#101015;--sv:#e23b50;--cr:#8f1b28;--cr2:#ff6b7d;--sm:#8b8c95;
+  --b:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --s:Georgia,"Times New Roman",serif;--d:Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#e9eaee;font:15px/1.55 var(--b);-webkit-font-smoothing:antialiased}
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:16px clamp(16px,4vw,44px);background:#0b0b0ef2;backdrop-filter:blur(10px);border-bottom:1px solid #ffffff14}
+h1{margin:0;font:700 20px/1 var(--d);text-transform:uppercase;letter-spacing:.02em}
+h1 small{display:block;font:600 10px var(--b);letter-spacing:.3em;color:var(--sm);margin-top:5px}
+main{max-width:1200px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 70px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 24px}
+.tabs button{font:500 12px var(--b);letter-spacing:.14em;text-transform:uppercase;padding:11px 17px;border:1px solid #ffffff2a;border-radius:99px;background:none;color:#e9eaee;cursor:pointer;transition:.3s}
+.tabs button:hover{border-color:var(--cr2)}
+.tabs button[aria-selected=true]{background:var(--sv);color:#000;border-color:var(--sv)}
+.card{padding:20px;border:1px solid #ffffff1a;border-radius:14px;background:linear-gradient(160deg,#17171c,#0e0e12);margin-bottom:14px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+label{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;font:600 11px var(--b);letter-spacing:.14em;text-transform:uppercase;color:var(--sm)}
+input,textarea,select{width:100%;padding:12px 14px;border:1px solid #ffffff2a;border-radius:10px;background:#0b0b0e;color:#fff;font:400 15px var(--b)}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--cr2)}
+button{font-family:var(--b)}
+.btn{padding:11px 18px;border:1px solid #ffffff33;border-radius:9px;background:#17171c;color:#fff;font:600 13px var(--b);cursor:pointer;transition:.25s}
+.btn:hover{border-color:var(--cr2);background:#2a1217}
+.btn.go{background:#15532b;border-color:#2f7a4a}.btn.go:hover{background:#1c6b38}
+.btn.no{background:#4a1a1f;border-color:#7a2f36}.btn.no:hover{background:#5d2128}
+.btn.sm{padding:8px 13px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.msg{padding:12px 15px;border-radius:9px;margin:0 0 16px;font-size:14px}
+.msg.ok{background:#12341f;border:1px solid #2f7a4a;color:#9be3b6}
+.msg.err{background:#3a1418;border:1px solid #7a2f36;color:#f0a3ac}
+.msg[hidden]{display:none}
+h2{font:700 26px/1.1 var(--d);text-transform:uppercase;margin:0 0 6px}
+.sub{color:var(--sm);font-size:14px;margin:0 0 22px}
+.empty{padding:26px;border:1px dashed #ffffff26;border-radius:12px;color:var(--sm);font-size:14px;text-align:center}
+.thumb{aspect-ratio:1;width:100%;object-fit:cover;border-radius:10px;background:#08080a;filter:grayscale(.3) brightness(.9)}
+.meta{font-size:13px;color:#a9aab3;margin:10px 0 0}
+.meta b{color:#e9eaee}
+.meta a{color:var(--cr2)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:11px 10px;font:600 11px var(--b);letter-spacing:.14em;text-transform:uppercase;color:var(--sm);border-bottom:1px solid #ffffff1f}
+td{padding:12px 10px;border-bottom:1px solid #ffffff12;vertical-align:top}
+td.num{text-align:right;white-space:nowrap}
+.pill{display:inline-block;padding:3px 10px;border-radius:99px;font:600 11px var(--b);letter-spacing:.08em;text-transform:uppercase}
+.pill.new{background:#3a2a12;color:#e6b567}.pill.confirmed{background:#12335a;color:#8ec3ff}
+.pill.shipped{background:#2a2a3f;color:#c3c6ff}.pill.delivered{background:#12341f;color:#9be3b6}
+.pill.cancelled{background:#3a1418;color:#f0a3ac}.pill.paid{background:#12341f;color:#9be3b6}
+.pill.pending{background:#3a2a12;color:#e6b567}
+#login{max-width:420px;margin:60px auto;padding:30px;border:1px solid #ffffff1a;border-radius:16px;background:linear-gradient(160deg,#17171c,#0e0e12)}
+#login h2{margin-bottom:18px}
+.hint{font-size:13px;color:var(--sm);margin-top:14px;line-height:1.5}
+.hidden{display:none!important}
+a.back{display:inline-block;margin-top:20px;font:500 12px var(--b);letter-spacing:.18em;text-transform:uppercase;color:var(--cr2);text-decoration:none;border-bottom:1px solid var(--cr2);padding-bottom:3px}
+@media(max-width:640px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Owner dashboard<small>PRABHAS FAN ARCHIVE</small></h1>
+  <div class="row" id="who" hidden>
+    <span class="meta" id="whoami"></span>
+    <button class="btn sm" id="signout">Sign out</button>
+    <a class="btn sm" href="/" style="text-decoration:none">View site</a>
+  </div>
+</header>
+
+<main>
+  <!-- ---------- sign in ---------- -->
+  <form id="login" novalidate>
+    <h2>Owner login</h2>
+    <p class="msg err" id="lmsg" hidden></p>
+    <label>Email<input id="lemail" type="email" autocomplete="username" required placeholder="you@example.com"></label>
+    <label>Password<input id="lpass" type="password" autocomplete="current-password" required></label>
+    <div class="row">
+      <button class="btn go" type="submit" id="lsub">Sign in</button>
+      <button class="btn" type="button" id="lcreate">Create owner account</button>
+    </div>
+    <p class="hint">First run: press <b>Create owner account</b> to register, then confirm the
+      account in Supabase → Authentication → Users and add your user id to
+      <code>public.admins</code> (see <code>supabase/schema.sql</code>).</p>
+    <a class="back" href="/">← Back to the archive</a>
+  </form>
+
+  <!-- ---------- app ---------- -->
+  <div id="app" class="hidden">
+    <p class="msg ok" id="amsg" hidden></p>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" data-t="subs" aria-selected="true">Photo queue</button>
+      <button role="tab" data-t="wishes" aria-selected="false">Wishes</button>
+      <button role="tab" data-t="orders" aria-selected="false">Orders</button>
+      <button role="tab" data-t="products" aria-selected="false">Products</button>
+      <button role="tab" data-t="scores" aria-selected="false">Scores</button>
+    </div>
+
+    <section id="t-subs"><h2>Photo submissions</h2><p class="sub">Approve to publish to the public wall.</p><div class="grid" id="subs"></div></section>
+    <section id="t-wishes" class="hidden"><h2>Birthday wishes</h2><p class="sub">Approve to publish on the birthday page.</p><div class="grid" id="wishes"></div></section>
+    <section id="t-orders" class="hidden"><h2>Orders</h2><p class="sub">Newest first. Update status as you fulfil them.</p><div id="orders"></div></section>
+    <section id="t-products" class="hidden"><h2>Products</h2><p class="sub">Changes appear on the site immediately — no redeploy.</p>
+      <div class="card">
+        <form id="pform" novalidate>
+          <p class="msg err" id="pmsg" hidden></p>
+          <div class="grid">
+            <label>Name<input id="pname" required placeholder="Product name"></label>
+            <label>Price (₹)<input id="pprice" type="number" min="0" step="1" required placeholder="999"></label>
+            <label>Stock <i>(blank = unlimited)</i><input id="pstock" type="number" min="0" step="1"></label>
+            <label>Image file name in <code>merch</code> bucket<input id="pimg" placeholder="tee.jpg"></label>
+          </div>
+          <label>Description<textarea id="pdesc" rows="2" maxlength="200"></textarea></label>
+          <div class="row">
+            <button class="btn go" type="submit">Add product</button>
+            <button class="btn" type="reset">Clear</button>
+          </div>
+        </form>
+      </div>
+      <div id="plist"></div>
+    </section>
+    <section id="t-scores" class="hidden"><h2>Quiz scores</h2><p class="sub">Top of the board.</p><div id="scores"></div></section>
+  </div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const cfg=window.__ARCHIVE_CONFIG__||{};
+const ONLINE=Boolean(cfg.enabled&&window.supabase);
+const db=ONLINE?window.supabase.createClient(cfg.supabaseUrl,cfg.anonKey):null;
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr=p=>'₹'+(p/100).toLocaleString('en-IN',{maximumFractionDigits:2});
+const when=iso=>new Date(iso).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+function flash(el,t,k){el.textContent=t;el.className='msg '+(k||'ok');el.hidden=false}
+function hide(el){el.hidden=true}
+
+if(!ONLINE){
+  flash($('#lmsg'),'Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY, then rebuild.','err');
+}
+
+/* ---------------- auth ---------------- */
+async function session(){
+  if(!ONLINE)return null;
+  const {data}=await db.auth.getSession();
+  return data.session;
+}
+function showApp(session){
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#who').hidden=false;
+  $('#whoami').textContent=session.user.email;
+  loadAll();
+}
+
+$('#lsub').addEventListener('click',async e=>{
+  e.preventDefault();
+  if(!ONLINE)return;
+  const {error}=await db.auth.signInWithPassword({email:$('#lemail').value.trim(),password:$('#lpass').value});
+  if(error)flash($('#lmsg'),error.message,'err');else location.reload();
+});
+$('#lcreate').addEventListener('click',async()=>{
+  if(!ONLINE)return;
+  const email=$('#lemail').value.trim(),password=$('#lpass').value;
+  if(!email||password.length<8)return flash($('#lmsg'),'Enter an email and a password of at least 8 characters.','err');
+  const {data,error}=await db.auth.signUp({email,password});
+  if(error)return flash($('#lmsg'),error.message,'err');
+  flash($('#lmsg'),'Account created. Confirm it in Supabase → Authentication → Users, add your user id to public.admins, then sign in.','ok');
+});
+$('#signout').addEventListener('click',async()=>{await db.auth.signOut();location.reload()});
+
+db&&db.auth.onAuthStateChange((e,s)=>{if(e==='SIGNED_IN'&&s)showApp(s)});
+
+/* ---------------- tabs ---------------- */
+$$('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  $$('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  $$('#app section').forEach(s=>s.classList.toggle('hidden',s.id!=='t-'+b.dataset.t));
+}));
+
+/* ---------------- moderation ---------------- */
+async function moderate(id,action){
+  const {data:{session}}=await db.auth.getSession();
+  const r=await fetch('/api/moderate',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+    body:JSON.stringify({id,action})
+  });
+  const out=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(out.error||'Request failed');
+  return out;
+}
+function bindModerate(container,selector){
+  container.addEventListener('click',async e=>{
+    const b=e.target.closest('[data-act]');
+    if(!b)return;
+    b.disabled=true;
+    try{
+      await moderate(b.dataset.id,b.dataset.act);
+      flash($('#amsg'),b.dataset.act==='approve'?'Approved.':'Rejected.','ok');
+      b.closest(selector).remove();
+    }catch(err){
+      flash($('#amsg'),err.message,'err');
+      b.disabled=false;
+    }
+  });
+}
+
+/* ---------------- loaders ---------------- */
+async function loadSubs(){
+  const {data,error}=await db.from('photo_submissions').select('*').eq('status','pending').order('created_at',{ascending:false});
+  const box=$('#subs');
+  if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
+  if(!data.length)return box.innerHTML='<p class="empty">Nothing waiting for review.</p>';
+  box.innerHTML=data.map(p=>`
+    <div class="card">
+      <img class="thumb" src="${db.storage.from('submissions').getPublicUrl(p.storage_path).publicUrl}" alt="" loading="lazy">
+      <p class="meta"><b>${esc(p.name)}</b> · ${esc(p.email)}<br>${p.caption?esc(p.caption)+'<br>':''}${when(p.created_at)}</p>
+      <div class="row">
+        <button class="btn go sm" data-act="approve" data-id="${p.id}">Approve</button>
+        <button class="btn no sm" data-act="reject" data-id="${p.id}">Reject</button>
+      </div>
+    </div>`).join('');
+  bindModerate(box,'.card');
+}
+
+async function loadWishes(){
+  const {data,error}=await db.from('wishes').select('*').eq('status','pending').order('created_at',{ascending:false});
+  const box=$('#wishes');
+  if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
+  if(!data.length)return box.innerHTML='<p class="empty">No wishes waiting.</p>';
+  box.innerHTML=data.map(w=>`
+    <div class="card">
+      <p class="meta"><b>${esc(w.name)}</b> · ${when(w.created_at)}</p>
+      <p style="margin:8px 0 0;color:#d6d7de">${esc(w.message)}</p>
+      <div class="row">
+        <button class="btn go sm" data-act="approve" data-id="${w.id}">Approve</button>
+        <button class="btn no sm" data-act="reject" data-id="${w.id}">Reject</button>
+      </div>
+    </div>`).join('');
+  bindModerate(box,'.card');
+}
+
+async function loadOrders(){
+  const {data,error}=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  const box=$('#orders');
+  if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
+  if(!data.length)return box.innerHTML='<p class="empty">No orders yet.</p>';
+  box.innerHTML=`<div class="card" style="overflow-x:auto"><table>
+    <thead><tr><th>Ref</th><th>Customer</th><th>Items</th><th class="num">Total</th><th>Pay</th><th>Status</th></tr></thead>
+    <tbody>${data.map(o=>`<tr>
+      <td><b>${esc(o.reference)}</b><br><span style="color:var(--sm)">${when(o.created_at)}</span></td>
+      <td>${esc(o.name)}<br><a href="mailto:${esc(o.email)}">${esc(o.email)}</a><br>
+        <span style="color:var(--sm)">${esc(o.address_line1)}, ${esc(o.city)}, ${esc(o.state)} ${esc(o.pincode)}</span></td>
+      <td>${o.items.map(i=>`${i.qty}× ${esc(i.name)}`).join('<br>')}</td>
+      <td class="num">${inr(o.total_paise)}</td>
+      <td><span class="pill ${o.payment_status==='paid'?'paid':'pending'}">${o.payment_method==='cod'?'COD':'Card'} ${esc(o.payment_status)}</span></td>
+      <td><select data-ref="${o.reference}">
+        ${['new','confirmed','shipped','delivered','cancelled'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
+      </select></td>
+    </tr>`).join('')}</tbody></table></div>`;
+  box.querySelectorAll('select').forEach(s=>s.addEventListener('change',async()=>{
+    try{
+      const {error:e}=await db.from('orders').update({status:s.value}).eq('reference',s.dataset.ref);
+      if(e)throw e;
+      flash($('#amsg'),'Order '+s.dataset.ref+' → '+s.value,'ok');
+    }catch(e){flash($('#amsg'),e.message,'err')}
+  }));
+}
+
+async function loadProducts(){
+  const {data,error}=await db.from('merch_products').select('*').order('sort_order',{ascending:true});
+  const box=$('#plist');
+  if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
+  if(!data.length)return box.innerHTML='<p class="empty">No products yet.</p>';
+  box.innerHTML=`<div class="card" style="overflow-x:auto"><table>
+    <thead><tr><th>Product</th><th class="num">Price</th><th class="num">Stock</th><th>Active</th><th></th></tr></thead>
+    <tbody>${data.map(p=>`<tr>
+      <td><b>${esc(p.name)}</b><br><span style="color:var(--sm)">${esc(p.description||'')}</span></td>
+      <td class="num">${inr(p.price_paise)}</td>
+      <td class="num">${p.stock==null?'∞':p.stock}</td>
+      <td><label style="margin:0;text-transform:none;letter-spacing:0"><input type="checkbox" data-on="${p.id}" ${p.active?'checked':''} style="width:auto"> ${p.active?'Live':'Hidden'}</label></td>
+      <td class="num"><button class="btn sm" data-del="${p.id}">Delete</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+
+  box.querySelectorAll('[data-on]').forEach(c=>c.addEventListener('change',async()=>{
+    try{const {error:e}=await db.from('merch_products').update({active:c.checked}).eq('id',c.dataset.on);if(e)throw e;loadProducts()}
+    catch(e){flash($('#amsg'),e.message,'err')}
+  }));
+  box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Delete this product?'))return;
+    try{const {error:e}=await db.from('merch_products').delete().eq('id',b.dataset.del);if(e)throw e;loadProducts()}
+    catch(e){flash($('#amsg'),e.message,'err')}
+  }));
+}
+
+async function loadScores(){
+  const {data,error}=await db.from('quiz_scores').select('*').order('score',{ascending:false}).order('created_at',{ascending:true}).limit(50);
+  const box=$('#scores');
+  if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
+  if(!data.length)return box.innerHTML='<p class="empty">No scores recorded.</p>';
+  box.innerHTML=`<div class="card" style="overflow-x:auto"><table>
+    <thead><tr><th>#</th><th>Name</th><th class="num">Score</th><th>When</th><th></th></tr></thead>
+    <tbody>${data.map((r,i)=>`<tr>
+      <td>${i+1}</td><td>${esc(r.name)}</td>
+      <td class="num">${r.score}/${r.total}</td>
+      <td>${when(r.created_at)}</td>
+      <td class="num"><button class="btn sm no" data-del="${r.id}">Remove</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+  box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{
+    try{const {error:e}=await db.from('quiz_scores').delete().eq('id',b.dataset.del);if(e)throw e;loadScores()}
+    catch(e){flash($('#amsg'),e.message,'err')}
+  }));
+}
+
+/* ---------------- product create ---------------- */
+$('#pform').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!ONLINE)return;
+  const name=$('#pname').value.trim(),price=Math.round(parseFloat($('#pprice').value));
+  if(!name||!Number.isFinite(price)||price<0)return flash($('#pmsg'),'Name and a valid price are required.','err');
+  const stockRaw=$('#pstock').value.trim();
+  const row={
+    name,description:$('#pdesc').value.trim()||null,
+    price_paise:Math.round(price*100),
+    stock:stockRaw===''?null:Math.max(0,parseInt(stockRaw,10)),
+    image_path:$('#pimg').value.trim()||null,
+    active:true,sort_order:99
+  };
+  try{
+    const {error}=await db.from('merch_products').insert(row);
+    if(error)throw error;
+    $('#pform').reset();
+    flash($('#amsg'),'Product added.','ok');
+    loadProducts();
+  }catch(err){flash($('#pmsg'),err.message,'err')}
+});
+
+/* ---------------- boot ---------------- */
+function loadAll(){loadSubs();loadWishes();loadOrders();loadProducts();loadScores()}
+session().then(s=>{if(s)showApp(s)});
+</script>
+</body>
+</html>

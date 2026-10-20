@@ -1,0 +1,10 @@
+# Vercel builds on Linux; keep text files LF regardless of the local OS.
+* text=auto eol=lf
+
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.woff binary

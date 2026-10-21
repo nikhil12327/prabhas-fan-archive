@@ -58,8 +58,21 @@ export default async function handler(req, res) {
   try { event = JSON.parse(payload); }
   catch { return json(res, 400, { error: 'Invalid payload' }); }
 
-  // Acknowledge quickly; we only care about successful checkouts.
-  if (event.type !== 'checkout.session.completed') return json(res, 200, { received: true });
+  // --- event routing ---------------------------------------------------
+  // Cards settle synchronously, so `checkout.session.completed` already
+  // carries payment_status 'paid'. UPI does not: Stripe sends `completed`
+  // while the money is still in flight (payment_status 'unpaid'), then
+  // follows up with async_payment_succeeded or async_payment_failed once
+  // the bank confirms. Fulfilling on `completed` alone would mark a UPI
+  // order paid before the funds actually arrive.
+  // https://docs.stripe.com/checkout/fulfillment
+  const HANDLED = new Set([
+    'checkout.session.completed',
+    'checkout.session.async_payment_succeeded',
+    'checkout.session.async_payment_failed',
+    'checkout.session.expired',
+  ]);
+  if (!HANDLED.has(event.type)) return json(res, 200, { received: true });
 
   const session = event.data.object;
   const reference = session.metadata?.order_reference;
@@ -68,6 +81,34 @@ export default async function handler(req, res) {
     return json(res, 200, { received: true });
   }
 
+  // `completed` + unpaid = UPI still settling. Leave the order pending and
+  // wait for the async event rather than fulfilling early.
+  if (event.type === 'checkout.session.completed' && session.payment_status !== 'paid') {
+    console.log('[webhook] checkout completed, awaiting async payment', reference);
+    return json(res, 200, { received: true });
+  }
+
+  // Session timed out before the buyer paid. payment_status stays 'pending'
+  // so the admin panel keeps showing it as unpaid.
+  if (event.type === 'checkout.session.expired') {
+    console.log('[webhook] checkout expired without payment', reference);
+    return json(res, 200, { received: true });
+  }
+
+  // A delayed payment failed to settle (UPI rejected, timed out, or bounced).
+  if (event.type === 'checkout.session.async_payment_failed') {
+    try {
+      await sb.update('orders', { reference },
+        { payment_status: 'failed', stripe_session_id: session.id });
+    } catch (e) {
+      console.error('[webhook] failed-mark update errored', e);
+      return json(res, 500, { error: 'Update failed' });
+    }
+    console.log('[webhook] async payment failed', reference);
+    return json(res, 200, { received: true });
+  }
+
+  // Money has actually landed: card settled, or async payment succeeded.
   try {
     const updated = await sb.update(
       'orders',

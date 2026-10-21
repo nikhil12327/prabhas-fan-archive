@@ -13,7 +13,7 @@
     "wire-images": "node scripts/wire-images.mjs",
     "config": "node scripts/build-config.mjs",
     "serve": "node scripts/serve.mjs",
-    "test": "node scripts/test-orders.mjs",
+    "test": "node scripts/test-orders.mjs && node scripts/test-webhook.mjs",
     "check": "node scripts/check.mjs"
   },
   "devDependencies": {

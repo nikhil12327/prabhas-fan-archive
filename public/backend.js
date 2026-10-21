@@ -383,7 +383,7 @@
         if (res.url) { location.href = res.url; return; }   // Stripe redirect
         writeCart({}); renderCart(); form.reset();
         flash(msg, `Order ${res.reference} placed! We've emailed you a confirmation.`, 'ok');
-        showConfirmation(res.reference, true);
+        showConfirmation(res.reference, 'cod');
       } catch (e) {
         flash(msg, e.message, 'err');
       } finally {
@@ -392,13 +392,19 @@
     });
   }
 
-  function showConfirmation(ref, cod) {
+  /* mode: 'cod' | 'stripe' | 'cancelled'.
+     The Stripe message deliberately never says "paid": UPI settles
+     asynchronously, so the buyer can be redirected back before Stripe has
+     confirmed the funds. The webhook is the source of truth. */
+  function showConfirmation(ref, mode) {
     let panel = q('#orderdone');
     if (!panel) return;
     panel.hidden = false;
-    panel.innerHTML = cod
+    panel.innerHTML = mode === 'cod'
       ? `<b>Order ${esc(ref)} received.</b><p>Pay on delivery. A confirmation is on its way to your inbox.</p>`
-      : `<b>Payment received — order ${esc(ref)}.</b><p>A receipt is on its way to your inbox.</p>`;
+      : mode === 'cancelled'
+        ? `<b>Order ${esc(ref)} not placed.</b><p>You left checkout before paying, so nothing was charged. Your cart is still saved.</p>`
+        : `<b>Order ${esc(ref)} received.</b><p>We're confirming your payment now — a receipt follows by email as soon as it clears.</p>`;
     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
@@ -408,7 +414,7 @@
     const ref = p.get('order');
     if (!ref) return;
     writeCart({});
-    showConfirmation(ref, !(p.get('paid') === '1'));
+    showConfirmation(ref, p.get('cancelled') === '1' ? 'cancelled' : 'stripe');
     p.delete('order'); p.delete('paid'); p.delete('cancelled');
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);

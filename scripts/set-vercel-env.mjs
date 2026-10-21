@@ -69,7 +69,7 @@ const create = (key, value) => api(`/v10/projects/${PROJECT_ID}/env`, {
   }),
 });
 
-const drop = id => api(`/v3/projects/${PROJECT_ID}/env/${id}`, { method: 'DELETE' });
+const drop = id => api(`/v9/projects/${PROJECT_ID}/env/${id}`, { method: 'DELETE' });
 
 // One listing up front, reused for every decision below.
 const listed = await api(`/v9/projects/${PROJECT_ID}/env`);

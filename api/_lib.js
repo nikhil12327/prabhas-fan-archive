@@ -11,6 +11,7 @@ export const env = {
   stripeWebhook: process.env.STRIPE_WEBHOOK_SECRET || '',
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
   razorpaySecret: process.env.RAZORPAY_KEY_SECRET || '',
+  razorpayWebhook: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   resendKey: process.env.RESEND_API_KEY || '',
   ownerEmail: process.env.OWNER_EMAIL || '',
   siteUrl: process.env.SITE_URL

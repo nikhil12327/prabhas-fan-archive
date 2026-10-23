@@ -25,9 +25,9 @@ project: static frontend, Supabase backend, Vercel serverless functions.
 | Payments | Razorpay Standard Checkout + COD + direct UPI QR | Card/UPI/netbanking through Razorpay's modal, COD for the rest of India |
 
 **Zero npm dependencies at runtime.** Supabase, Stripe, Razorpay and Resend are
-all called over their plain REST APIs with Node's built-in `fetch`, and both the
-Stripe webhook and the Razorpay checkout signature are checked with
-`node:crypto`. `vercel` is a dev-only CLI.
+all called over their plain REST APIs with Node's built-in `fetch`, and every
+signature — Stripe's webhook, Razorpay's checkout and Razorpay's webhook — is
+checked with `node:crypto`. `vercel` is a dev-only CLI.
 
 ---
 
@@ -46,6 +46,7 @@ api/               Vercel serverless functions (Node 24)
   create-order.js      create a Razorpay order for the checkout modal
   verify-payment.js    verify the Razorpay HMAC, then flip the order to paid
   stripe-webhook.js    flip an order to paid on Stripe confirmation
+  razorpay-webhook.js  same safety net for Razorpay, server-to-server
   moderate.js          approve/reject a submission, moving the storage file
   _lib.js              Supabase REST, Resend, storage helpers
 
@@ -105,14 +106,18 @@ UI's error paths can be seen.
 
 ```bash
 npm run check   # syntax across every JS file, JSON config and inline script
-npm test        # 47 assertions across orders, webhook and Razorpay routes
+npm test        # 70 assertions across orders, both webhooks and Razorpay routes
 ```
 
 The order tests mock Supabase and assert that client-supplied prices are
 ignored, stock limits are enforced, shipping thresholds apply, references match
 `PA-XXXXX`, and Razorpay degrades to a friendly message when unconfigured. The
 Razorpay tests assert the amount is sent in paise, a forged signature writes
-nothing, and a valid signature flips the order to `paid`.
+nothing, and a valid signature flips the order to `paid`. The two webhook suites
+sign their payloads exactly as Stripe and Razorpay do — a real HMAC over the raw
+body — so the signature checks are exercised for real: UPI's async settle rule
+on the Stripe side, and idempotent fulfilment plus the amount cross-check on the
+Razorpay side.
 
 ---
 
@@ -134,8 +139,17 @@ nothing, and a valid signature flips the order to `paid`.
    back to `VERCEL_URL`, so nothing breaks before the first deploy.
 4. **Razorpay** — put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` (Settings →
    API Keys) in the environment; `node scripts/set-vercel-env.mjs` marks the
-   secret as sensitive. No webhook is needed: the browser posts the checkout
-   result to `/api/verify-payment`, which validates the signature server-side.
+   secret as sensitive. The browser posts the checkout result to
+   `/api/verify-payment`, which validates the signature server-side.
+
+   Also register the safety net: Settings → Webhooks → Add New Webhook,
+   URL `https://<your-domain>/api/razorpay-webhook`, events `payment.captured`
+   and `payment.failed`, and a secret of your choosing — the same value in
+   `RAZORPAY_WEBHOOK_SECRET`. It covers the buyer closing the tab after the
+   money moves but before `verify-payment` returns: Razorpay still delivers the
+   capture server-to-server, so the order is fulfilled and emailed either way.
+   It verifies Razorpay's HMAC in constant time, checks the captured amount
+   against what was charged, and is idempotent against Razorpay's retries.
 5. **Stripe** (optional, legacy card path) — add a webhook pointing at
    `/api/stripe-webhook` with events `checkout.session.completed`, and put its
    signing secret in `STRIPE_WEBHOOK_SECRET`. Registering it over the API

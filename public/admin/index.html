@@ -60,7 +60,14 @@ td.num{text-align:right;white-space:nowrap}
 #login h2{margin-bottom:18px}
 .hint{font-size:13px;color:var(--sm);margin-top:14px;line-height:1.5}
 .hidden{display:none!important}
+[hidden]{display:none!important}
 a.back{display:inline-block;margin-top:20px;font:500 12px var(--b);letter-spacing:.18em;text-transform:uppercase;color:var(--cr2);text-decoration:none;border-bottom:1px solid var(--cr2);padding-bottom:3px}
+input[type=file]{padding:10px 12px;color:var(--sm)}
+input[type=file]::file-selector-button{margin-right:12px;padding:7px 13px;border:1px solid #ffffff33;border-radius:7px;background:#17171c;color:#fff;font:600 12px var(--b);cursor:pointer;transition:.25s}
+input[type=file]::file-selector-button:hover{border-color:var(--cr2);background:#2a1217}
+.prev{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.prev img{width:66px;height:66px;object-fit:cover;border-radius:10px;border:1px solid #ffffff22;background:#08080a}
+#plist td img{width:46px;height:46px;object-fit:cover;border-radius:8px;background:#08080a;filter:grayscale(.3) brightness(.9);display:block}
 @media(max-width:640px){.grid{grid-template-columns:1fr 1fr}}
 </style>
 </head>
@@ -86,9 +93,6 @@ a.back{display:inline-block;margin-top:20px;font:500 12px var(--b);letter-spacin
       <button class="btn go" type="submit" id="lsub">Sign in</button>
       <button class="btn" type="button" id="lcreate">Create owner account</button>
     </div>
-    <p class="hint">First run: press <b>Create owner account</b> to register, then confirm the
-      account in Supabase → Authentication → Users and add your user id to
-      <code>public.admins</code> (see <code>supabase/schema.sql</code>).</p>
     <a class="back" href="/">← Back to the archive</a>
   </form>
 
@@ -115,11 +119,15 @@ a.back{display:inline-block;margin-top:20px;font:500 12px var(--b);letter-spacin
             <label>Name<input id="pname" required placeholder="Product name"></label>
             <label>Price (₹)<input id="pprice" type="number" min="0" step="1" required placeholder="999"></label>
             <label>Stock <i>(blank = unlimited)</i><input id="pstock" type="number" min="0" step="1"></label>
-            <label>Image file name in <code>merch</code> bucket<input id="pimg" placeholder="tee.jpg"></label>
+            <label>Product photo <i>(optional — JPG / PNG / WebP, up to 5 MB)</i><input id="pfile" type="file" accept="image/*"></label>
+          </div>
+          <div class="prev" id="pprev" hidden>
+            <img id="pprevimg" alt="Photo preview">
+            <button type="button" class="btn sm" id="pclear">Remove photo</button>
           </div>
           <label>Description<textarea id="pdesc" rows="2" maxlength="200"></textarea></label>
           <div class="row">
-            <button class="btn go" type="submit">Add product</button>
+            <button class="btn go" type="submit" id="psub">Add product</button>
             <button class="btn" type="reset">Clear</button>
           </div>
         </form>
@@ -173,7 +181,7 @@ $('#lcreate').addEventListener('click',async()=>{
   if(!email||password.length<8)return flash($('#lmsg'),'Enter an email and a password of at least 8 characters.','err');
   const {data,error}=await db.auth.signUp({email,password});
   if(error)return flash($('#lmsg'),error.message,'err');
-  flash($('#lmsg'),'Account created. Confirm it in Supabase → Authentication → Users, add your user id to public.admins, then sign in.','ok');
+  flash($('#lmsg'),'Account created — you can sign in now.','ok');
 });
 $('#signout').addEventListener('click',async()=>{await db.auth.signOut();location.reload()});
 
@@ -261,7 +269,7 @@ async function loadOrders(){
         <span style="color:var(--sm)">${esc(o.address_line1)}, ${esc(o.city)}, ${esc(o.state)} ${esc(o.pincode)}</span></td>
       <td>${o.items.map(i=>`${i.qty}× ${esc(i.name)}`).join('<br>')}</td>
       <td class="num">${inr(o.total_paise)}</td>
-      <td><span class="pill ${o.payment_status==='paid'?'paid':'pending'}">${o.payment_method==='cod'?'COD':'Card'} ${esc(o.payment_status)}</span></td>
+      <td><span class="pill ${o.payment_status==='paid'?'paid':'pending'}">${o.payment_method==='cod'?'COD':o.payment_method==='upi'?'UPI':o.payment_method==='razorpay'?'Razorpay':'Card'} ${esc(o.payment_status)}</span></td>
       <td><select data-ref="${o.reference}">
         ${['new','confirmed','shipped','delivered','cancelled'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
       </select></td>
@@ -281,8 +289,9 @@ async function loadProducts(){
   if(error)return box.innerHTML=`<p class="empty">${esc(error.message)}</p>`;
   if(!data.length)return box.innerHTML='<p class="empty">No products yet.</p>';
   box.innerHTML=`<div class="card" style="overflow-x:auto"><table>
-    <thead><tr><th>Product</th><th class="num">Price</th><th class="num">Stock</th><th>Active</th><th></th></tr></thead>
+    <thead><tr><th>Photo</th><th>Product</th><th class="num">Price</th><th class="num">Stock</th><th>Active</th><th></th></tr></thead>
     <tbody>${data.map(p=>`<tr>
+      <td>${p.image_path?`<img src="${esc(pubUrl('merch',p.image_path))}" alt="" loading="lazy">`:'<span style="color:var(--sm)">—</span>'}</td>
       <td><b>${esc(p.name)}</b><br><span style="color:var(--sm)">${esc(p.description||'')}</span></td>
       <td class="num">${inr(p.price_paise)}</td>
       <td class="num">${p.stock==null?'∞':p.stock}</td>
@@ -321,26 +330,51 @@ async function loadScores(){
 }
 
 /* ---------------- product create ---------------- */
+// live preview of the chosen photo
+$('#pfile').addEventListener('change',()=>{
+  const f=$('#pfile').files[0];
+  if(!f){$('#pprev').hidden=true;return}
+  $('#pprevimg').src=URL.createObjectURL(f);
+  $('#pprev').hidden=false;
+});
+$('#pclear').addEventListener('click',()=>{$('#pfile').value='';$('#pprev').hidden=true});
+
 $('#pform').addEventListener('submit',async e=>{
   e.preventDefault();
   if(!ONLINE)return;
   const name=$('#pname').value.trim(),price=Math.round(parseFloat($('#pprice').value));
   if(!name||!Number.isFinite(price)||price<0)return flash($('#pmsg'),'Name and a valid price are required.','err');
+  const file=$('#pfile').files[0];
+  if(file){
+    if(!file.type.startsWith('image/'))return flash($('#pmsg'),'That file is not an image.','err');
+    if(file.size>5*1024*1024)return flash($('#pmsg'),'Photos must be under 5 MB.','err');
+  }
   const stockRaw=$('#pstock').value.trim();
-  const row={
-    name,description:$('#pdesc').value.trim()||null,
-    price_paise:Math.round(price*100),
-    stock:stockRaw===''?null:Math.max(0,parseInt(stockRaw,10)),
-    image_path:$('#pimg').value.trim()||null,
-    active:true,sort_order:99
-  };
+  const btn=$('#psub');btn.disabled=true;btn.textContent='Adding…';
   try{
+    let image_path=null;
+    if(file){
+      const safe=file.name.toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/^-|-$/g,'')||'product.jpg';
+      const path=`${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safe}`;
+      const up=await db.storage.from('merch').upload(path,file,{contentType:file.type,upsert:false});
+      if(up.error)throw up.error;
+      image_path=path;
+    }
+    const row={
+      name,description:$('#pdesc').value.trim()||null,
+      price_paise:Math.round(price*100),
+      stock:stockRaw===''?null:Math.max(0,parseInt(stockRaw,10)),
+      image_path,
+      active:true,sort_order:99
+    };
     const {error}=await db.from('merch_products').insert(row);
     if(error)throw error;
     $('#pform').reset();
+    $('#pprev').hidden=true;
     flash($('#amsg'),'Product added.','ok');
     loadProducts();
   }catch(err){flash($('#pmsg'),err.message,'err')}
+  finally{btn.disabled=false;btn.textContent='Add product'}
 });
 
 /* ---------------- boot ---------------- */

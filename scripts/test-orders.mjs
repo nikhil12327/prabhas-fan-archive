@@ -14,7 +14,10 @@ process.env.SHIPPING_PAISE = '7900';
 // Stripe call. Clear them so the assertions hold regardless of the environment.
 delete process.env.STRIPE_SECRET_KEY;
 delete process.env.STRIPE_WEBHOOK_SECRET;
+delete process.env.RAZORPAY_KEY_ID;
+delete process.env.RAZORPAY_KEY_SECRET;
 process.env.RESEND_API_KEY = 're_test_key'; // makes sendEmail take the real path (mocked below)
+process.env.ORDER_RATE_LIMIT = '0';         // hermetic: the limiter gets its own test below
 
 const { default: handler } = await import('../api/orders.js');
 
@@ -62,7 +65,7 @@ function check(name, cond, detail) {
   else { fail++; console.log(`  ✗ ${name}${detail ? ' — ' + detail : ''}`); }
 }
 
-function call(body) {
+function call(body, headers = {}) {
   return new Promise(resolve => {
     const res = {
       statusCode: 0,
@@ -74,7 +77,7 @@ function call(body) {
         resolve({ status: this.statusCode, body: parsed, raw: chunk });
       },
     };
-    handler({ method: 'POST', body: JSON.stringify(body), headers: {} }, res);
+    handler({ method: 'POST', body: JSON.stringify(body), headers }, res);
   });
 }
 
@@ -163,11 +166,44 @@ console.log('\napi/orders.js\n');
     `subject ${sentEmails[0] && sentEmails[0].subject}`);
 }
 
-// 9. stripe without keys degrades gracefully (503, not a crash)
+// 9. razorpay without keys degrades gracefully (503, not a crash)
 {
-  const r = await call({ ...base, payment_method: 'stripe', items: [{ product_id: PRODUCT_A.id, qty: 1 }] });
-  check('Stripe without keys returns a friendly 503',
+  const r = await call({ ...base, payment_method: 'razorpay', items: [{ product_id: PRODUCT_A.id, qty: 1 }] });
+  check('Razorpay without keys returns a friendly 503',
     r.status === 503 && /cash on delivery/i.test(r.body.error || ''), `got ${r.status}: ${r.body.error}`);
+}
+
+// 10. direct UPI (scan & pay): stored pending, buyer gets QR details
+{
+  sentEmails.length = 0;
+  const r = await call({ ...base, payment_method: 'upi', items: [{ product_id: PRODUCT_A.id, qty: 1 }] });
+  const o = capturedOrders.at(-1);
+  check('UPI order is stored with payment_method upi and payment pending',
+    r.status === 200 && o.payment_method === 'upi' && o.payment_status === 'pending',
+    `status ${r.status}, method ${o && o.payment_method}, pay ${o && o.payment_status}`);
+  check('UPI response carries reference, total and vpa for the QR panel',
+    r.body.upi === true && /^PA-/.test(r.body.reference || '') &&
+    r.body.total_paise === 99900 + 7900 && String(r.body.vpa || '').includes('@'),
+    JSON.stringify(r.body));
+  check('owner is emailed about the UPI order',
+    sentEmails.some(e => /New UPI order/.test(e.subject || '')));
+}
+
+// 11. per-IP burst limit (env-tunable; <= 0 disables)
+{
+  process.env.ORDER_RATE_LIMIT = '3';
+  let last;
+  for (let i = 0; i < 4; i++) {
+    last = await call(
+      { ...base, items: [{ product_id: PRODUCT_A.id, qty: 1 }] },
+      { 'x-forwarded-for': '203.0.113.9' });
+  }
+  check('4th rapid order from one IP is rate-limited with 429',
+    last.status === 429, `got ${last.status}`);
+  check('a different IP is unaffected',
+    (await call({ ...base, items: [{ product_id: PRODUCT_A.id, qty: 1 }] },
+      { 'x-forwarded-for': '198.51.100.7' })).status === 200);
+  process.env.ORDER_RATE_LIMIT = '0';
 }
 
 globalThis.fetch = realFetch;

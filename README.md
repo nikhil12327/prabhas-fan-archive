@@ -22,11 +22,12 @@ project: static frontend, Supabase backend, Vercel serverless functions.
 | Database + auth + storage | Supabase | Postgres with row-level security, GoTrue auth and Storage in one project |
 | Compute | Vercel Node serverless functions | Sits next to the static assets, zero build step |
 | Email | Resend | Plain REST, no SDK, generous free tier |
-| Payments | Stripe Checkout + cash on delivery | Card/UPI for those who want it, COD for the rest of India |
+| Payments | Razorpay Standard Checkout + COD + direct UPI QR | Card/UPI/netbanking through Razorpay's modal, COD for the rest of India |
 
-**Zero npm dependencies at runtime.** Supabase, Stripe and Resend are each
-called over their plain REST APIs with Node's built-in `fetch`, and the Stripe
-webhook signature is checked with `node:crypto`. `vercel` is a dev-only CLI.
+**Zero npm dependencies at runtime.** Supabase, Stripe, Razorpay and Resend are
+all called over their plain REST APIs with Node's built-in `fetch`, and both the
+Stripe webhook and the Razorpay checkout signature are checked with
+`node:crypto`. `vercel` is a dev-only CLI.
 
 ---
 
@@ -42,6 +43,8 @@ public/            static site (Vercel serves this verbatim)
 
 api/               Vercel serverless functions (Node 24)
   orders.js            create an order — prices re-read from the database
+  create-order.js      create a Razorpay order for the checkout modal
+  verify-payment.js    verify the Razorpay HMAC, then flip the order to paid
   stripe-webhook.js    flip an order to paid on Stripe confirmation
   moderate.js          approve/reject a submission, moving the storage file
   _lib.js              Supabase REST, Resend, storage helpers
@@ -56,9 +59,13 @@ scripts/               config generation, checks, tests, image tooling
 2. `api/orders.js` re-reads each product from Postgres and recomputes the
    subtotal, shipping and total. A tampered client cannot set its own price.
 3. For COD the order is stored and the owner is emailed immediately.
-   For card/UPI a Stripe Checkout Session is created and the browser is
-   redirected; `api/stripe-webhook.js` verifies the HMAC over the **raw** body
-   and flips the order to `paid`, then emails buyer and owner.
+   For card/UPI/netbanking `api/create-order.js` creates a Razorpay order for
+   the same amount and the browser opens Razorpay's checkout modal. On success
+   `api/verify-payment.js` recomputes `HMAC-SHA256(order_id + "|" + payment_id)`
+   with `RAZORPAY_KEY_SECRET`, compares it in constant time, and only then flips
+   the order to `paid` and emails buyer and owner — a forged signature is
+   refused with `400` and marks nothing as paid. The Stripe path still exists
+   behind `api/stripe-webhook.js`, which verifies the HMAC over the **raw** body.
 
 ### Security model
 
@@ -98,12 +105,14 @@ UI's error paths can be seen.
 
 ```bash
 npm run check   # syntax across every JS file, JSON config and inline script
-npm test        # 13 assertions on the order endpoint
+npm test        # 47 assertions across orders, webhook and Razorpay routes
 ```
 
 The order tests mock Supabase and assert that client-supplied prices are
 ignored, stock limits are enforced, shipping thresholds apply, references match
-`PA-XXXXX`, and Stripe degrades to a friendly message when unconfigured.
+`PA-XXXXX`, and Razorpay degrades to a friendly message when unconfigured. The
+Razorpay tests assert the amount is sent in paise, a forged signature writes
+nothing, and a valid signature flips the order to `paid`.
 
 ---
 
@@ -123,11 +132,16 @@ ignored, stock limits are enforced, shipping thresholds apply, references match
    marking the four secrets as sensitive so Vercel never returns their values.
    `SITE_URL` is the stable production alias; without it the functions fall
    back to `VERCEL_URL`, so nothing breaks before the first deploy.
-4. **Stripe** — add a webhook pointing at `/api/stripe-webhook` with events
-   `checkout.session.completed`, and put its signing secret in
-   `STRIPE_WEBHOOK_SECRET`. Registering it over the API returns that secret in
-   the response, which is the least error-prone way to obtain it.
-5. **Owner account** — visit `/admin/`, create the owner account, confirm it in
+4. **Razorpay** — put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` (Settings →
+   API Keys) in the environment; `node scripts/set-vercel-env.mjs` marks the
+   secret as sensitive. No webhook is needed: the browser posts the checkout
+   result to `/api/verify-payment`, which validates the signature server-side.
+5. **Stripe** (optional, legacy card path) — add a webhook pointing at
+   `/api/stripe-webhook` with events `checkout.session.completed`, and put its
+   signing secret in `STRIPE_WEBHOOK_SECRET`. Registering it over the API
+   returns that secret in the response, which is the least error-prone way to
+   obtain it.
+6. **Owner account** — visit `/admin/`, create the owner account, confirm it in
    Supabase → Authentication, then insert your user id into `public.admins`.
 
 ### Image tooling

@@ -1,13 +1,17 @@
 // POST /api/orders — create a merchandise order.
-// Two payment methods:
-//   cod    → order stored 'new' / payment 'pending'; owner is emailed.
-//   stripe → a Checkout Session is created; order stored 'pending' and
-//            flipped to 'paid' by /api/stripe-webhook on success.
+// Payment methods:
+//   cod      → order stored 'new' / payment 'pending'; owner is emailed.
+//   stripe   → a Checkout Session is created; order stored 'pending' and
+//              flipped to 'paid' by /api/stripe-webhook on success.
+//   upi      → order stored 'pending'; the buyer scans the shop's UPI QR
+//              and the owner confirms the payment in their UPI app.
+//   razorpay → handed to /api/create-order (see below), which creates the
+//              Razorpay order the browser needs to open the checkout modal.
 //
 // Prices are ALWAYS re-read from the database. The browser sends only
 // product ids and quantities, so a tampered client cannot set its own price.
 
-import { env, sb, sendEmail, json, makeRef, inr } from './_lib.js';
+import { env, sb, sendEmail, json, makeRef, inr, rateLimit, clientIp } from './_lib.js';
 
 const SHIPPING_PAISE = Number(process.env.SHIPPING_PAISE ?? 7900);
 const MAX_QTY = 20;
@@ -16,6 +20,29 @@ function bad(res, msg) { return json(res, 400, { error: msg }); }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+
+  // Razorpay has its own route: it must create the Razorpay order first so the
+  // browser can open the modal with a real order_id. A client still posting
+  // the old bundle here is handed over to that handler rather than storing a
+  // 'razorpay' row no payment could ever be verified against. The hand-off
+  // happens before this route's own rate limit so a single request is counted
+  // once, by /api/create-order alone.
+  let preBody;
+  try { preBody = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
+  catch { preBody = null; }
+  if (preBody && preBody.payment_method === 'razorpay') {
+    const { default: createRazorpayOrder } = await import('./create-order.js');
+    return createRazorpayOrder(req, res);
+  }
+
+  // Throttle before doing any work: an order row also emails the owner, so
+  // an unthrottled endpoint is an email-flood and quota-burn vector.
+  // ORDER_RATE_LIMIT: orders per IP per 10 minutes; <= 0 disables.
+  const rl = rateLimit('orders', clientIp(req), Number(process.env.ORDER_RATE_LIMIT ?? 12));
+  if (!rl.ok) {
+    res.setHeader('Retry-After', String(rl.retryAfter));
+    return json(res, 429, { error: 'Too many orders from this device. Please try again in a few minutes.' });
+  }
 
   let body;
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
@@ -30,7 +57,9 @@ export default async function handler(req, res) {
   const city = String(body.city || '').trim();
   const state = String(body.state || '').trim();
   const pincode = String(body.pincode || '').trim();
-  const payment = body.payment_method === 'stripe' ? 'stripe' : 'cod';
+  const payment = body.payment_method === 'stripe' ? 'stripe'
+    : body.payment_method === 'upi' ? 'upi'
+      : 'cod';
 
   if (!name || name.length > 80) return bad(res, 'Please enter your name.');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'Please enter a valid email.');
@@ -133,20 +162,28 @@ export default async function handler(req, res) {
     }
   }
 
-  // --- COD path: notify the owner right away ------------------------
+  // --- COD / direct-UPI path: notify the owner right away -----------
+  const vpa = process.env.UPI_VPA || 'bonigalanikhil123-1@okaxis';
   const rows = items.map(i => `  ${i.qty} × ${i.name} — ${inr(i.price_paise * i.qty)}`).join('\n');
+  const payLine = payment === 'upi'
+    ? `Payment: UPI (scan & pay) — awaiting confirmation\nBuyer should have paid ₹${(total / 100).toFixed(2)} to ${vpa} with ${reference} in the note.`
+    : 'Payment: Cash on delivery';
   const summary =
     `New order ${reference}\n\n` +
     `${name} <${email}>${phone ? ` · ${phone}` : ''}\n` +
     `${line1}${line2 ? ', ' + line2 : ''}\n${city}, ${state} ${pincode}\n\n` +
     `${rows}\n  Subtotal: ${inr(subtotal)}\n  Shipping: ${shipping ? inr(shipping) : 'Free'}\n  Total: ${inr(total)}\n\n` +
-    `Payment: Cash on delivery\nManage: ${env.siteUrl}/admin/#/orders`;
+    `${payLine}\nManage: ${env.siteUrl}/admin/#/orders`;
 
   sendEmail({
     to: env.ownerEmail || email,
-    subject: `[Fan Archive] New order ${reference} — ${inr(total)}`,
+    subject: `[Fan Archive] New ${payment === 'upi' ? 'UPI ' : ''}order ${reference} — ${inr(total)}`,
     text: summary,
   }).catch(e => console.error('[orders] notify failed', e));
+
+  // The buyer needs the reference, the exact amount and the VPA to render
+  // the QR panel; payment_status stays 'pending' until the owner confirms.
+  if (payment === 'upi') return json(res, 200, { ok: true, reference, total_paise: total, vpa, upi: true });
 
   return json(res, 200, { ok: true, reference, cod: true });
 }

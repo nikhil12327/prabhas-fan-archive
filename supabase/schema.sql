@@ -109,7 +109,7 @@ create index if not exists merch_products_active_idx
 
 -- ------------------------------------------------------------
 -- 6. Orders — created only by the serverless function (service role)
---    payment_method: 'cod' or 'stripe'
+--    payment_method: 'cod', 'stripe', 'razorpay' or 'upi' (direct scan-and-pay QR)
 -- ------------------------------------------------------------
 create table if not exists public.orders (
   id               uuid primary key default gen_random_uuid(),
@@ -126,15 +126,24 @@ create table if not exists public.orders (
   subtotal_paise   integer not null check (subtotal_paise >= 0),
   shipping_paise   integer not null default 0 check (shipping_paise >= 0),
   total_paise      integer not null check (total_paise >= 0),
-  payment_method   text not null check (payment_method in ('cod','stripe')),
+  payment_method   text not null check (payment_method in ('cod','stripe','razorpay','upi')),
   payment_status   text not null default 'pending'
                    check (payment_status in ('pending','paid','failed','refunded')),
-  stripe_session_id text,
+  stripe_session_id text,   -- Stripe session id, or Razorpay order id for 'razorpay'
   status           text not null default 'new'
                    check (status in ('new','confirmed','shipped','delivered','cancelled')),
   created_at       timestamptz not null default now()
 );
 create index if not exists orders_status_idx on public.orders (status, created_at desc);
+
+-- Widen payment_method to accept 'razorpay'.
+-- `create table if not exists` never alters an existing table, so on a
+-- database created before Razorpay existed the inline CHECK above still
+-- rejects the new value (error 23514). Dropping and re-adding the constraint
+-- makes re-running this file upgrade an older database in place.
+alter table public.orders drop constraint if exists orders_payment_method_check;
+alter table public.orders add constraint orders_payment_method_check
+  check (payment_method in ('cod','stripe','razorpay','upi'));
 
 -- ============================================================
 -- ROW LEVEL SECURITY

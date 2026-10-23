@@ -270,16 +270,20 @@
     }
 
     grid.innerHTML = PRODUCTS.map(p => {
-      const img = p.image_path
-        ? `<div class="im" style="background-image:url('${pubUrl('merch', p.image_path)}')"></div>`
-        : '<div class="im"></div>';
+      const url = p.image_path ? pubUrl('merch', p.image_path) : '';
+      const img = url
+        ? `<div class="im"><img src="${esc(url)}" alt="${esc(p.name)}" loading="lazy"></div>`
+        : `<div class="im ph"><span aria-hidden="true">${esc((p.name || '?').trim().slice(0, 1).toUpperCase())}</span></div>`;
       const stock = p.stock != null && p.stock <= 0;
       return `<article class="mi rv in" data-p="${p.id}">
         <div class="x">${img}</div>
-        <em>${stock ? 'SOLD OUT' : 'IN STOCK'}</em>
-        <h3>${esc(p.name)}</h3>
-        <p>${esc(p.description || '')}<br><b class="price">${inr(p.price_paise)}</b></p>
-        <button class="opt add" data-add="${p.id}" ${stock ? 'disabled' : ''}>
+        <em class="${stock ? 'out' : ''}">${stock ? 'Sold out' : 'In stock'}</em>
+        <div class="mb">
+          <h3>${esc(p.name)}</h3>
+          <p>${esc(p.description || '')}</p>
+          <div class="mrow"><b class="price">${inr(p.price_paise)}</b><small>${stock ? 'Unavailable' : 'Free shipping over ₹1,999'}</small></div>
+        </div>
+        <button class="add" data-add="${p.id}" ${stock ? 'disabled' : ''}>
           ${stock ? 'Sold out' : 'Add to cart'}
         </button>
       </article>`;
@@ -367,7 +371,7 @@
       btn.disabled = true; btn.textContent = 'Placing order…';
 
       try {
-        const res = await call('/api/orders', {
+        const payload = {
           name: q('#oname').value.trim(),
           email: q('#oemail').value.trim().toLowerCase(),
           phone: q('#ophone').value.trim(),
@@ -378,10 +382,14 @@
           pincode: q('#opin').value.trim(),
           payment_method: pay,
           items: lines.map(l => ({ product_id: l.p.id, qty: l.qty })),
-        });
+        };
+        const endpoint = pay === 'razorpay' ? '/api/create-order' : '/api/orders';
+        const res = await call(endpoint, payload);
 
-        if (res.url) { location.href = res.url; return; }   // Stripe redirect
+        if (res.url) { location.href = res.url; return; }   // legacy Stripe redirect (shouldn't happen)
+        if (res.razorpay_order_id) { openRazorpay(res, pay); return; }  // Razorpay modal — clears cart on success
         writeCart({}); renderCart(); form.reset();
+        if (res.upi) { showUpiPay(res.reference, res.total_paise, res.vpa); return; }
         flash(msg, `Order ${res.reference} placed! We've emailed you a confirmation.`, 'ok');
         showConfirmation(res.reference, 'cod');
       } catch (e) {
@@ -392,10 +400,67 @@
     });
   }
 
-  /* mode: 'cod' | 'stripe' | 'cancelled'.
-     The Stripe message deliberately never says "paid": UPI settles
-     asynchronously, so the buyer can be redirected back before Stripe has
-     confirmed the funds. The webhook is the source of truth. */
+  /* Razorpay Standard Checkout: opens the payment modal for an order the
+     backend just created. The cart is cleared and the confirmation shown only
+     after /api/verify-payment confirms the signature server-side. */
+  async function openRazorpay(order, payMethod) {
+    if (typeof window.Razorpay === 'undefined') {
+      flash(q('#ordmsg'), 'Payment window could not load. Please refresh and try again.', 'err');
+      return;
+    }
+
+    const rzp = new window.Razorpay({
+      key: order.key_id,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'Prabhas — The Fan Archive',
+      description: `Order ${order.reference}`,
+      order_id: order.razorpay_order_id,
+      prefill: {
+        name: q('#oname').value.trim(),
+        email: q('#oemail').value.trim().toLowerCase(),
+        contact: q('#ophone').value.trim(),
+      },
+      theme: { color: '#8f1b28' },
+      handler: async function (resp) {
+        const btn = q('#ordersubmit');
+        btn.disabled = true; btn.textContent = 'Confirming payment…';
+        try {
+          const v = await call('/api/verify-payment', {
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+            reference: order.reference,
+          });
+          if (v.ok) {
+            writeCart({}); renderCart(); q('#orderform').reset();
+            showConfirmation(order.reference, 'razorpay');
+          } else {
+            flash(q('#ordmsg'), v.error || 'Payment could not be confirmed.', 'err');
+          }
+        } catch (e) {
+          flash(q('#ordmsg'), e.message || 'Payment could not be confirmed.', 'err');
+        } finally {
+          btn.disabled = false; btn.textContent = 'Place order';
+        }
+      },
+      modal: {
+        ondismiss: function () {
+          flash(q('#ordmsg'), 'Payment cancelled. Your cart is still saved — you can try again.', 'err');
+        },
+      },
+    });
+
+    rzp.on('payment.failed', function (resp) {
+      flash(q('#ordmsg'), (resp.error && resp.error.description) || 'Payment failed. Please try again.', 'err');
+    });
+
+    rzp.open();
+  }
+
+  /* mode: 'cod' | 'razorpay' | 'cancelled'.
+     The message deliberately never overstates: the webhook/verify endpoint is
+     the source of truth. */
   function showConfirmation(ref, mode) {
     let panel = q('#orderdone');
     if (!panel) return;
@@ -404,7 +469,37 @@
       ? `<b>Order ${esc(ref)} received.</b><p>Pay on delivery. A confirmation is on its way to your inbox.</p>`
       : mode === 'cancelled'
         ? `<b>Order ${esc(ref)} not placed.</b><p>You left checkout before paying, so nothing was charged. Your cart is still saved.</p>`
-        : `<b>Order ${esc(ref)} received.</b><p>We're confirming your payment now — a receipt follows by email as soon as it clears.</p>`;
+        : mode === 'razorpay'
+          ? `<b>Order ${esc(ref)} confirmed.</b><p>Payment received — a receipt is on its way to your inbox.</p>`
+          : `<b>Order ${esc(ref)} received.</b><p>We're confirming your payment now — a receipt follows by email as soon as it clears.</p>`;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /* Direct UPI: the buyer scans the shop's own QR (Google Pay / PhonePe /
+     Paytm) with the exact amount and the order reference pre-filled.
+     payment_status stays 'pending' until the owner confirms the transfer. */
+  function showUpiPay(ref, totalPaise, vpa) {
+    const panel = q('#orderdone');
+    if (!panel) return;
+    const amount = (Number(totalPaise) / 100).toFixed(2);
+    const link = 'upi://pay?pa=' + encodeURIComponent(vpa) +
+      '&pn=' + encodeURIComponent('Nikhil Bonigala') +
+      '&am=' + amount + '&cu=INR&tn=' + encodeURIComponent(ref);
+    panel.hidden = false;
+    panel.innerHTML =
+      `<b>Order ${esc(ref)} placed — payment pending.</b>
+       <p>Pay exactly <b>${inr(totalPaise)}</b> by scanning the QR with any UPI app
+       (Google Pay, PhonePe, Paytm). Your order reference is already filled in as the payment note.</p>
+       <div class="upip">
+         <img src="/images/upi-qr.png" alt="UPI QR code — pay ${esc(vpa)}" width="210" height="210">
+         <div class="upid">
+           <p><span>UPI ID</span><code>${esc(vpa)}</code></p>
+           <p><span>Amount</span><b>${inr(totalPaise)}</b></p>
+           <p><span>Order</span><b>${esc(ref)}</b></p>
+           <a class="opt" href="${link}">Open UPI app</a>
+         </div>
+       </div>
+       <p>Your order ships once the payment lands — usually within a minute. A confirmation email is on its way.</p>`;
     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 

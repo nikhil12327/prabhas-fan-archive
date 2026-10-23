@@ -9,6 +9,8 @@ export const env = {
   anonKey: process.env.SUPABASE_ANON_KEY || '',
   stripeKey: process.env.STRIPE_SECRET_KEY || '',
   stripeWebhook: process.env.STRIPE_WEBHOOK_SECRET || '',
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
+  razorpaySecret: process.env.RAZORPAY_KEY_SECRET || '',
   resendKey: process.env.RESEND_API_KEY || '',
   ownerEmail: process.env.OWNER_EMAIL || '',
   siteUrl: process.env.SITE_URL
@@ -136,6 +138,37 @@ export function json(res, status, body) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(body));
+}
+
+/* ------------------------------------------------------------------
+   Best-effort abuse throttling.
+   These buckets live in the function instance's memory: each serverless
+   instance keeps its own counts, so this is not a global WAF — but it
+   blunts the realistic burst attacks (order spam that floods the owner's
+   inbox, or hammering the moderation endpoint). `max` is env-tunable;
+   values <= 0 disable the limiter entirely.
+   ------------------------------------------------------------------ */
+const HITS = new Map();
+const WINDOW_MS = 10 * 60 * 1000;
+
+export function rateLimit(name, id, max) {
+  if (!(max > 0)) return { ok: true };
+  const now = Date.now();
+  const key = `${name}:${id}`;
+  let hit = HITS.get(key);
+  if (!hit || now - hit.t0 > WINDOW_MS) { hit = { t0: now, n: 0 }; HITS.set(key, hit); }
+  hit.n++;
+  // Safety valve: never let the map grow without bound on a long-lived instance.
+  if (HITS.size > 5000) HITS.clear();
+  if (hit.n > max) {
+    return { ok: false, retryAfter: Math.max(1, Math.ceil((hit.t0 + WINDOW_MS - now) / 1000)) };
+  }
+  return { ok: true };
+}
+
+/** Best caller identity available on Vercel (first hop of X-Forwarded-For). */
+export function clientIp(req) {
+  return String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
 }
 
 /** Human-facing order code, e.g. PA-8F3K2 */

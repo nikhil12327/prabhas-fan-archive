@@ -73,8 +73,15 @@ h2{font-size:clamp(38px,6.6vw,96px)}
 .qz h3{font-size:clamp(22px,2.7vw,34px);margin-bottom:26px;line-height:1.1}.opt{display:block;width:100%;text-align:left;padding:16px 20px;border:1px solid #ffffff22;margin-bottom:10px;transition:.3s}.opt:hover{border-color:var(--sv);padding-left:30px}.opt.ok{background:#1d4d33;border-color:#3ca56b}.opt.no{background:#5a1620;border-color:var(--cr2)}
 .res{text-align:center;padding:20px 0}.res b{font:700 clamp(64px,11vw,112px)/1 var(--d)}.note{margin-top:60px;padding:24px;border:1px dashed #ffffff30;max-width:900px;color:var(--sm);font-size:14px}
 /* merch */
-#merch{background:var(--ch)}.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px;margin-top:50px}.mi{position:relative;background:var(--bg);padding:0 0 22px;overflow:hidden}.mi .im{aspect-ratio:4/5;background-size:cover;filter:grayscale(1) brightness(.55);transition:filter .8s,transform 1.2s cubic-bezier(.2,.7,.2,1)}.mi:hover .im{filter:grayscale(.2) brightness(.8);transform:scale(1.05)}.mi div.x{overflow:hidden}
-.mi h3{font-size:20px;margin:16px 16px 4px}.mi p{padding:0 16px;font-size:13px;color:var(--sm)}.mi em{position:absolute;top:12px;left:12px;font:600 10px var(--b);letter-spacing:.2em;padding:6px 10px;background:var(--cr);font-style:normal}
+#merch{background:var(--ch)}.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;margin-top:50px}
+.mi{position:relative;display:flex;flex-direction:column;background:var(--bg);border:1px solid #ffffff14;border-radius:14px;overflow:hidden;transition:border-color .4s,transform .5s cubic-bezier(.2,.7,.2,1),box-shadow .5s}.mi:hover{border-color:var(--cr2);transform:translateY(-6px);box-shadow:0 18px 40px -20px #000}
+.mi .x{overflow:hidden;aspect-ratio:4/5;background:radial-gradient(circle at 30% 20%,#8f1b2833,transparent 60%),#0b0b0e}
+.mi .im{width:100%;height:100%;filter:grayscale(.65) brightness(.8);transition:filter .8s,transform 1.2s cubic-bezier(.2,.7,.2,1)}.mi:hover .im{filter:grayscale(.1) brightness(.95);transform:scale(1.06)}
+.mi .im img{width:100%;height:100%;object-fit:cover;display:block}.mi .im.ph{display:grid;place-items:center}.mi .im.ph span{font:700 60px/1 var(--d);color:transparent;-webkit-text-stroke:1px #ffffff33}
+.mi em{position:absolute;top:12px;left:12px;z-index:2;font:600 10px var(--b);letter-spacing:.2em;text-transform:uppercase;padding:6px 10px;background:var(--cr);font-style:normal}.mi em.out{background:#26262e;color:var(--sm)}
+.mi .mb{display:flex;flex-direction:column;gap:5px;padding:16px 16px 12px;flex:1}.mi h3{font-size:19px}.mi p{font-size:13px;color:var(--sm);flex:1}
+.mrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:8px}.mrow small{font-size:11px;color:#6c6d76}
+.mi .add{margin:2px 16px 16px;padding:13px;text-align:center;border:1px solid #ffffff2a;border-radius:10px;font:600 12px var(--b);letter-spacing:.14em;text-transform:uppercase;transition:.3s}.mi .add:hover{background:var(--sv);color:#000;border-color:var(--sv)}.mi .add[disabled]{opacity:.4;cursor:not-allowed}.mi .add[disabled]:hover{background:none;color:inherit;border-color:#ffffff2a}
 /* birthday */
 #bday{text-align:center;overflow:hidden}#bday:before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 100%,#8f1b2855,transparent 65%)}.cd{display:flex;justify-content:center;gap:clamp(14px,4vw,56px);margin:44px 0 36px;position:relative}.cd div{font:700 clamp(40px,7.5vw,92px)/1 var(--d)}.cd small{display:block;font:500 11px var(--b);letter-spacing:.28em;color:var(--sm);text-align:center;margin-top:8px}
 .msg{max-width:620px;margin:0 auto;color:var(--tx);position:relative;font:400 clamp(20px,2vw,28px)/1.4 var(--s)}
@@ -154,7 +161,7 @@ body.home #tn{display:none}
 @media(max-width:560px){.dock{gap:8px}.dc{padding:12px;gap:8px;border-radius:14px}.dc small{display:none}.dc b{font-size:14px}.dc svg{width:24px;height:24px}.dc u{top:10px;right:10px}}
 .page{display:none}.page.on{display:block;animation:pgin .9s ease both .1s}@keyframes pgin{from{opacity:0}}#pg-home.on{animation:none}
 body.home footer,body.home #hud{display:none}
-#cv{position:fixed;inset:0;z-index:97;pointer-events:none;background:linear-gradient(180deg,#8f1b28,#0b0b0e 70%);transform:translateY(101%)}#cv.a{animation:wipe .95s cubic-bezier(.7,0,.25,1)}@keyframes wipe{0%{transform:translateY(101%)}45%,55%{transform:none}100%{transform:translateY(-101%)}}
+#cv{position:fixed;inset:0;z-index:97;pointer-events:none;background:linear-gradient(180deg,#8f1b28,#0b0b0e 70%);transform:translateY(101%)}#cv.a{animation:wipe .95s cubic-bezier(.7,0,.25,1)}#cv.a:after{content:"";position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:cvspin .7s linear infinite}@keyframes cvspin{to{transform:rotate(360deg)}}@keyframes wipe{0%{transform:translateY(101%)}45%,55%{transform:none}100%{transform:translateY(-101%)}}
 .tabs{display:flex;flex-wrap:wrap;gap:8px;padding:calc(94px + env(safe-area-inset-top)) var(--pad) 0}.tabs button{font:500 12px var(--b);letter-spacing:.16em;text-transform:uppercase;padding:12px 20px;border:1px solid #ffffff2a;border-radius:99px;transition:.3s}.tabs button:hover{border-color:var(--cr2)}.tabs button[aria-selected=true]{background:var(--sv);color:#000;border-color:var(--sv)}
 .page[data-tabbed] .w{padding-top:36px}
 .pn{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 var(--pad) clamp(60px,8vw,110px)}.pn a{display:flex;flex-direction:column;gap:4px;padding:22px;border:1px solid #ffffff1a;border-radius:14px;background:linear-gradient(160deg,#17171c,#0e0e12);transition:border-color .3s,background .4s,transform .5s}.pn a:hover{border-color:var(--cr2);background:linear-gradient(160deg,#2a1217,#0e0e12);transform:translateY(-3px)}.pn small{font:500 11px var(--b);letter-spacing:.22em;text-transform:uppercase;color:var(--sm)}.pn b{font:700 clamp(20px,2.4vw,28px)/1.05 var(--d);text-transform:uppercase}.pn a:last-child{text-align:right}
@@ -207,20 +214,27 @@ body.home footer,body.home #hud{display:none}
 .ctot{display:flex;justify-content:space-between;padding:9px 0;color:var(--sm);font-size:14px}
 .ctot b{color:#e9eaee}.ctot.grand{margin-top:6px;padding-top:14px;border-top:1px solid #ffffff1f;font-size:18px}
 .ctot.grand b{color:var(--cr2);font:700 22px var(--d)}
-.pays{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:20px}
+.pays{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:20px}
 .pay{flex-direction:row!important;align-items:center;gap:12px!important;padding:15px;border:1px solid #ffffff26;border-radius:12px;cursor:pointer;text-transform:none!important;letter-spacing:0!important;transition:border-color .3s,background .3s}
 .pay:has(input:checked){border-color:var(--cr2);background:#2a121733}
 .pay input{width:auto!important;padding:0!important;border:0!important;background:none!important;accent-color:var(--cr2)}
 .pay span{display:flex;flex-direction:column;gap:3px}
 .pay b{font:600 15px var(--s);color:#fff;text-transform:none;letter-spacing:0}
-.pay small{font:400 12px var(--s);color:var(--sm);text-transform:none;letter-spacing:0}
-.opt.big{width:100%;padding:17px;font-size:13px;margin-top:6px}
+.pay small{font:400 12px var(--s);color:var(--sm);text-transform:none;letter-spacing:0} .opt.big{width:100%;padding:17px;font-size:13px;margin-top:6px}
+.opt.big[disabled]{position:relative;opacity:.75;cursor:progress;padding-left:44px}
+.opt.big[disabled]:before{content:"";position:absolute;left:16px;top:50%;width:18px;height:18px;margin-top:-9px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:cvspin .7s linear infinite}
+.opt.big[disabled]:hover{padding-left:44px}
 .done{margin-top:20px;padding:18px;border:1px solid #2f7a4a;border-radius:12px;background:#12341f}
 .done b{display:block;font:700 18px var(--d);text-transform:uppercase;color:#9be3b6;margin-bottom:7px}
 .done p{margin:0;color:#c9e8d5;font-size:14px}
-.price{color:var(--cr2);font:700 17px var(--b)}
-.mi .add{margin-top:14px;width:calc(100% - 44px)}
-.mi .add[disabled]{opacity:.45;cursor:not-allowed}
+.upip{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:14px 0 4px}
+.upip img{width:210px;height:210px;border-radius:12px;background:#fff;padding:8px;display:block}
+.upid{display:grid;gap:8px;min-width:200px}
+.upid p{display:flex;flex-direction:column;gap:2px;margin:0;font-size:13px;color:#9fd7b4}
+.upid p span{font:600 10px var(--b);letter-spacing:.16em;text-transform:uppercase}
+.upid p b,.upid p code{color:#fff;font-size:15px;word-break:break-all}
+.upid .opt{display:inline-block;text-align:center;margin-top:4px;padding:11px 18px}
+.price{color:var(--cr2);font:700 18px var(--b)}
 .empty{grid-column:1/-1;padding:26px;border:1px dashed #ffffff26;border-radius:12px;color:var(--sm);font-size:14px}
 @media(max-width:700px){.fw2,.fw3,.pays{grid-template-columns:1fr}.pwgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
 </style></head><body>
@@ -287,7 +301,8 @@ body.home footer,body.home #hud{display:none}
 <h4>Payment method</h4>
 <div class="pays">
 <label class="pay"><input type="radio" name="pay" value="cod" checked><span><b>Cash on delivery</b><small>Pay when your order arrives</small></span></label>
-<label class="pay"><input type="radio" name="pay" value="stripe"><span><b>Card / UPI</b><small>Secure checkout powered by Stripe</small></span></label>
+<label class="pay"><input type="radio" name="pay" value="razorpay"><span><b>Card / UPI / Netbanking</b><small>Pay securely with Razorpay</small></span></label>
+<label class="pay"><input type="radio" name="pay" value="upi"><span><b>UPI — scan &amp; pay</b><small>Pay directly from any UPI app</small></span></label>
 </div>
 <button class="opt big" id="ordersubmit" type="submit">Place order</button>
 <p class="fmsg" id="ordmsg" hidden></p>
@@ -308,25 +323,42 @@ body.home footer,body.home #hud{display:none}
 <p class="fmsg" id="wsmsg" hidden></p>
 </form></div></section>
 </main>
-<main class="page" id="pg-privacy"><section><div class="w lg"><p class="lab rv">Legal</p><h2 class="sil rv">Privacy <span class="ac2">Policy</span></h2><p class="m">Last updated: <span class="ph">[DATE]</span></p>
-<p>The Prabhas Fan Archive is an independent fan project run by <span class="ph">[YOUR NAME]</span>. It is not affiliated with Prabhas, his management, production companies, or film studios. This page explains what the website does with information about you.</p>
-<h3>What we collect</h3><p>Right now the website does not ask you to sign up, log in, or fill in a form, and it does not collect names, emails, or photos.</p>
-<h3>Cookies and local storage</h3><p>The site sets no cookies. The quiz saves a short list of question numbers in your browser's local storage so you see new questions each time. It never leaves your device, and you can clear it in your browser settings.</p>
-<h3>Third-party services</h3><ul><li><b>Google Fonts</b> loads the site's typefaces. Your browser contacts Google, which can see your IP address and browser details.</li><li><b>Hosting provider</b> (<span class="ph">[HOST, e.g. Vercel]</span>) keeps standard server logs such as IP address, page and time.</li><li><span class="ph">[Add analytics here if you install it, and update this policy and add a cookie notice if it uses cookies.]</span></li></ul>
-<h3>Fan photo submissions</h3><p>Photo submissions are not open yet. If they open, this policy will be updated first to say what is collected, how long it is kept, and how to ask for removal.</p>
-<h3>Your rights</h3><p>Depending on where you live you may have the right to ask what data we hold, to correct it, or to have it deleted. Contact <span class="ph">[YOUR EMAIL]</span> and we will reply within <span class="ph">[30]</span> days.</p>
-<h3>Children</h3><p>The site is not directed at children under <span class="ph">[13 / 16 per your country]</span> and does not knowingly collect their data.</p>
-<h3>Changes</h3><p>If this policy changes, the date above will change too.</p>
+<main class="page" id="pg-privacy"><section><div class="w lg"><p class="lab rv">Legal</p><h2 class="sil rv">Privacy <span class="ac2">Policy</span></h2><p class="m">Last updated: <span class="ph">22 October 2026</span></p>
+<p>The Prabhas Fan Archive (the “Site”) is an independent, non-commercial fan project run by <b>Nikhil Bonigala</b> (“the Owner”). It is not affiliated with Prabhas, his management, production companies, or film studios. This policy explains what information the Site collects, why it is collected, and what rights you have over it. Questions? Email <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a>.</p>
+<h3>1. What we collect</h3><ul>
+<li><b>Orders.</b> When you place an order we collect your name, email address, phone number (optional), full shipping address, the items ordered, and the payment method you chose (cash on delivery or card/UPI).</li>
+<li><b>Payment details.</b> Card, UPI and netbanking payments are handled entirely by Razorpay. The Site never sees or stores your card number, UPI ID, or bank details — it only receives confirmation that a payment succeeded or failed.</li>
+<li><b>Fan photo submissions.</b> If you submit a photo to the wall: your name, email address, caption, and the photo file itself.</li>
+<li><b>Birthday wishes.</b> The display name you enter and your message text.</li>
+<li><b>Quiz leaderboard.</b> The name you choose and your score.</li>
+<li><b>Server logs.</b> Our host records standard technical logs (IP address, page requested, time, browser details) for security and debugging.</li>
+</ul>
+<h3>2. How we use it</h3><p>Order details are used only to process, deliver and support your order — including sending a confirmation email with your order reference. Photos, wishes and leaderboard entries are used only to display what you submitted; photos and wishes appear on the public pages <b>only after manual approval</b> by the Owner. Server logs are used for security and troubleshooting. <b>We do not sell, rent, or share your personal information with advertisers, and there is no behavioural tracking or analytics on this Site.</b></p>
+<h3>3. Where it is stored</h3><p>The Site is hosted on <b>Vercel</b>. Data and uploaded files are stored in <b>Supabase</b> (a PostgreSQL database and file storage) behind row-level security policies, so public visitors can only ever read approved content. Transactional email is delivered through <b>Resend</b>. Payments are processed by <b>Razorpay</b>, a PCI DSS compliant payment provider.</p>
+<h3>4. Cookies and local storage</h3><p>The Site sets no advertising or tracking cookies. It uses your browser's local storage only to remember your shopping cart and to rotate quiz questions. That information stays on your device and can be cleared at any time in your browser settings.</p>
+<h3>5. Third-party services</h3><ul><li><b>Razorpay</b> — card, UPI and netbanking payments (<a href="https://razorpay.com/privacy/" target="_blank" rel="noopener" style="border-bottom:1px solid #fff4">razorpay.com/privacy</a>).</li><li><b>Supabase</b> — database and file storage (<a href="https://supabase.com/privacy" target="_blank" rel="noopener" style="border-bottom:1px solid #fff4">supabase.com/privacy</a>).</li><li><b>Vercel</b> — hosting and server logs (<a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener" style="border-bottom:1px solid #fff4">vercel.com/legal/privacy-policy</a>).</li><li><b>Resend</b> — delivery of transactional order emails.</li><li><b>Google Fonts</b> — loads the Site's typefaces; your browser contacts Google, which can see your IP address and browser details.</li></ul>
+<h3>6. Retention</h3><p>Order records are kept for as long as needed to deliver your order and for basic record-keeping. Submitted photos, wishes and leaderboard entries are kept until you ask us to remove them. Server logs are retained by the host for its standard operational window.</p>
+<h3>7. Your rights</h3><p>You can ask what personal data we hold about you, request a correction, or ask for deletion — including a submitted photo, wish, leaderboard entry or order record. Email <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a> (ideally from the address you used) and we will respond within 30 days.</p>
+<h3>8. Children</h3><p>The Site is not directed at anyone under 18, and the shop is not intended for purchases by minors. We do not knowingly collect children's data; if you believe a child has submitted personal data, email us and it will be deleted.</p>
+<h3>9. Changes</h3><p>If the way the Site handles data changes, this policy will be updated and the date at the top revised.</p>
+<h3>10. Contact</h3><p><b>Nikhil Bonigala</b> — owner and operator<br>Email: <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a></p>
 <a class="bk" href="#/" data-c>← Back to the archive</a></div></section></main>
-<main class="page" id="pg-terms"><section><div class="w lg"><p class="lab rv">Legal</p><h2 class="sil rv">Terms &amp; <span class="ac2">Conditions</span></h2><p class="m">Last updated: <span class="ph">[DATE]</span></p>
-<h3>About this site</h3><p>The Prabhas Fan Archive is a non-commercial, independent fan project run by <span class="ph">[YOUR NAME]</span>. It is not affiliated with, endorsed by, or connected to Prabhas, his management, production companies, or film studios.</p>
-<h3>Content and ownership</h3><p>Names, film titles, posters, stills and photographs belong to their respective owners and are shown for fan commentary and information. Credits and sources are given where known. If you own something shown here and want it credited or removed, write to <span class="ph">[YOUR EMAIL]</span> and it will be handled promptly.</p>
-<h3>Accuracy</h3><p>Facts come from public sources and may contain mistakes or become outdated. Nothing here is official. Box-office figures and awards are as reported by the sources named.</p>
-<h3>Acceptable use</h3><p>Do not copy the site's design or code to pass off as your own, attempt to disrupt it, or scrape it at a rate that harms it.</p>
-<h3>Merchandise</h3><p>No merchandise is for sale at this time. If sales begin, separate Refund and Shipping terms will be published first.</p>
-<h3>External links</h3><p>Links to other sites are for convenience; we are not responsible for their content.</p>
-<h3>Liability</h3><p>The site is provided "as is", without warranties. To the extent the law allows, the owner is not liable for losses arising from its use.</p>
-<h3>Governing law</h3><p>These terms are governed by the laws of <span class="ph">[YOUR COUNTRY / STATE]</span>.</p>
+<main class="page" id="pg-terms"><section><div class="w lg"><p class="lab rv">Legal</p><h2 class="sil rv">Terms &amp; <span class="ac2">Conditions</span></h2><p class="m">Last updated: <span class="ph">22 October 2026</span></p>
+<p>These Terms apply to your use of the Prabhas Fan Archive (the “Site”), operated by <b>Nikhil Bonigala</b> (“the Owner”, “we”). Contact: <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a>. By using the Site or placing an order, you agree to these Terms.</p>
+<h3>1. About this site</h3><p>The Site is an independent, non-commercial fan archive. It is not affiliated with, endorsed by, or connected to Prabhas, his management, production companies, or film studios.</p>
+<h3>2. Content and ownership</h3><p>Names, film titles, posters, stills and photographs belong to their respective owners and are shown for fan commentary and information. Credits and sources are given where known. If you own something shown here and want it credited or removed, write to <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a> and it will be handled promptly.</p>
+<h3>3. Accuracy</h3><p>Facts come from public sources and may contain mistakes or become outdated. Nothing here is official. Box-office figures and awards are as reported by the sources named.</p>
+<h3>4. Acceptable use</h3><p>Do not copy the Site's design or code to pass off as your own, attempt to disrupt it, or scrape it at a rate that harms it. Orders placed fraudulently (fake details, or repeatedly refusing cash-on-delivery parcels) may be cancelled.</p>
+<h3>5. The shop</h3><p>The Merch Archive sells small-run, unofficial fan-made merchandise while stock lasts. All prices are in Indian rupees (₹) and include delivery within India: shipping is <b>₹79 per order, free on orders of ₹1,999 or more</b>.</p>
+<h3>6. Orders</h3><p>An order is an offer to buy. You receive an order reference (for example PA-8F3K2) by email once it is accepted. If an item sells out before dispatch, you will be refunded for it in full.</p>
+<h3>7. Payment</h3><p>Three methods are offered: <b>Cash on delivery</b> — you pay the courier in cash when the order arrives (have the exact amount ready where possible). <b>Card / UPI / Netbanking via Razorpay</b> — processed by Razorpay on its secure payment page; UPI payments are confirmed by your bank and can take a few minutes. Card and UPI details are never stored on this Site. <b>UPI (scan &amp; pay)</b> — pay directly to the shop's UPI ID using the QR shown at checkout, with your order reference as the payment note; your order ships once the payment is received and confirmed.</p>
+<h3>8. Shipping</h3><p>Orders are typically dispatched within 3–5 business days and delivered within 3–7 business days after dispatch across India, depending on your location. Delivery dates are estimates, not guarantees.</p>
+<h3>9. Cancellation</h3><p>You may cancel an order before it is dispatched by replying to your order confirmation email. Once dispatched, see Returns below.</p>
+<h3>10. Returns and refunds</h3><p>If an item arrives damaged, defective, or different from what you ordered, email <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a> within 7 days of delivery with your order reference and a photo of the item. We will replace it or refund it in full, including shipping. Refunds for card/UPI orders go back to the original payment method; cash-on-delivery refunds are made by bank transfer or UPI. As merchandise is produced in small runs, change-of-mind returns are not accepted unless required by law.</p>
+<h3>11. Liability</h3><p>The Site is provided "as is", without warranties. To the extent the law allows, the Owner is not liable for indirect or consequential losses arising from use of the Site, and total liability for any order is limited to the amount you paid for it.</p>
+<h3>12. External links</h3><p>Links to other sites are for convenience; we are not responsible for their content.</p>
+<h3>13. Governing law</h3><p>These Terms are governed by the laws of India, and disputes are subject to the courts of India. Nothing in these Terms limits your statutory consumer rights.</p>
+<h3>14. Contact</h3><p><b>Nikhil Bonigala</b> — owner and operator<br>Email: <a href="mailto:bonigalanikhil2@gmail.com" style="border-bottom:1px solid #fff4">bonigalanikhil2@gmail.com</a></p>
 <a class="bk" href="#/" data-c>← Back to the archive</a></div></section></main>
 <footer data-t="End">
 <div class="fb"><p>Independent fan archive. Not affiliated with Prabhas, his management, production companies, or film studios. Photographs are shown for fan commentary; all rights remain with their owners.<br><a href="/admin/" style="border-bottom:1px solid #fff4">Owner login</a> · <a href="#/privacy" style="border-bottom:1px solid #fff4">Privacy</a> · <a href="#/terms" style="border-bottom:1px solid #fff4">Terms</a></p>
@@ -335,6 +367,7 @@ body.home footer,body.home #hud{display:none}
 <div id="mv" hidden role="dialog" aria-modal="true" aria-labelledby="mvt"></div>
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const fx=s=>String(s==null?'':s).replace(/\*\*(.+?)\*\*/g,'<b class="hi">$1</b>').replace(/__(.+?)__/g,'<b class="hw">$1</b>').replace(/\^\^(.+?)\^\^/g,'<b class="ha">$1</b>');
@@ -444,14 +477,16 @@ function mk(e){if(e.key=='Escape'){e.preventDefault();closeMv()}else if(e.key=='
 mvEl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.classList.contains('mvx'))closeMv();else if(b.classList.contains('nx')){go(st.i+1);play()}else if(b.classList.contains('pv')){go(st.i-1);play()}else if(b.classList.contains('th')){go($$('#mv .th').indexOf(b));play()}else if(b.classList.contains('pp')){st.pause=!st.pause;b.textContent=st.pause?'Play':'Pause';play()}else if(b.id=='dt'){openMovie(st.m.slug,'d',st.op)}});
 /* nav active state + page router: #/story, #/films, #/films/gallery, #/records/awards ... Home is #/ */
 const LEGAL=['privacy','terms'],PAGES=['story','films','records','fan','merch','bday'],PT={privacy:'Privacy Policy',terms:'Terms & Conditions',story:'The story',films:'Films & Gallery',records:'Records',fan:'Fan zone',merch:'Merch archive',bday:'Birthday 2026'},SUBS={films:['films','gallery'],records:['mile','awards']};
-const ul=$('#ul'),cv=$('#cv');let curP=null;
+const ul=$('#ul'),cv=$('#cv');let curP=null,cvl=null;
 function setNav(p){const h='#/'+p;$$('#tn a,#menu a').forEach(x=>x.classList.toggle('on',x.getAttribute('href')==h));const el=$('#tn a[href="'+h+'"]');if(el&&el.offsetWidth){ul.style.opacity=1;ul.style.width=el.offsetWidth+'px';ul.style.transform=`translateX(${el.offsetLeft}px)`}else ul.style.opacity=0}
 function setSub(p,s){const ids=SUBS[p];if(!ids)return;const k=ids.includes(s)?s:ids[0];$$(`#pg-${p} section[data-sub]`).forEach(x=>x.hidden=x.dataset.sub!==k);$$(`#pg-${p} .tabs button`).forEach(x=>x.setAttribute('aria-selected',x.dataset.sub===k))}
 function show(p,s){document.body.classList.toggle('home',p=='home');$$('.page').forEach(x=>x.classList.toggle('on',x.id=='pg-'+p));setSub(p,s);setNav(p);$('#hud').textContent=p=='home'||LEGAL.includes(p)?'':String(PAGES.indexOf(p)+1).padStart(2,'0')+' · '+PT[p];document.title=(p=='home'?'':PT[p]+' — ')+'Prabhas — The Fan Archive';scrollTo({top:0,behavior:'instant'});curP=p}
 function route(){const a=location.hash.replace(/^#\/?/,'').split('/'),p=PAGES.includes(a[0])||LEGAL.includes(a[0])?a[0]:'home',s=a[1]||'';
  if(p===curP){setSub(p,s);scrollTo({top:0,behavior:'instant'});return}
  if(curP===null||RM){show(p,s);return}
- cv.classList.remove('a');void cv.offsetWidth;cv.classList.add('a');setTimeout(()=>show(p,s),430)}
+ if(cvl)clearTimeout(cvl);
+ cv.classList.remove('a');void cv.offsetWidth;cv.classList.add('a');
+ cvl=setTimeout(()=>{show(p,s);cvl=null},430)}
 document.addEventListener('click',e=>{const b=e.target.closest('.tabs button');if(b&&curP)location.hash='#/'+curP+'/'+b.dataset.sub});
 addEventListener('hashchange',route);addEventListener('resize',()=>setNav(curP||'home'));document.fonts&&document.fonts.ready.then(()=>setNav(curP||'home'));route();
 /* reveal + trackers */

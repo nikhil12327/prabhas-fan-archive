@@ -5,7 +5,7 @@
 // `submissions` bucket into the public `wall` bucket. Doing the move server-side
 // with the service role keeps the private bucket unreachable from the client.
 
-import { env, sb, storage, verifyUser, isAdminUser, json, publicUrl } from './_lib.js';
+import { env, sb, storage, verifyUser, isAdminUser, json, publicUrl, rateLimit, clientIp } from './_lib.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
@@ -21,6 +21,13 @@ export default async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch { return json(res, 400, { error: 'Invalid JSON' }); }
 
+  // Admin-only, but still rate-limit the action endpoint.
+  const rl = rateLimit('moderate', clientIp(req), Number(process.env.MODERATE_RATE_LIMIT ?? 30));
+  if (!rl.ok) {
+    res.setHeader('Retry-After', String(rl.retryAfter));
+    return json(res, 429, { error: 'Too many moderation actions. Try again shortly.' });
+  }
+
   const id = String(body.id || '');
   const action = body.action; // 'approve' | 'reject'
   if (!id || !['approve', 'reject'].includes(action)) {
@@ -35,13 +42,22 @@ export default async function handler(req, res) {
   if (!sub) return json(res, 404, { error: 'Submission not found.' });
   if (sub.status !== 'pending') return json(res, 409, { error: `Already ${sub.status}.` });
 
+  // `storage_path` is client-inserted data — treat it as untrusted. Only a
+  // plain filename (no slashes, no dot-dot) is ever fetched or deleted, so a
+  // crafted row can never make the service role touch another bucket or path.
+  const srcName = String(sub.storage_path || '').split('/').pop() || '';
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(srcName) || srcName.includes('..')) {
+    console.error('[moderate] unsafe storage_path on submission', id, sub.storage_path);
+    return json(res, 400, { error: 'This submission has an unsafe file path and cannot be processed.' });
+  }
+
   const stamp = { reviewed_at: new Date().toISOString(), reviewed_by: user.sub };
 
   // --- reject: mark it and drop the file ---------------------------
   if (action === 'reject') {
     try {
       await sb.update('photo_submissions', { id }, { ...stamp, status: 'rejected' });
-      await storage.remove('submissions', sub.storage_path).catch(e => {
+      await storage.remove('submissions', srcName).catch(e => {
         console.warn('[moderate] could not delete rejected file', e.message);
       });
     } catch (e) {
@@ -52,16 +68,19 @@ export default async function handler(req, res) {
   }
 
   // --- approve: copy to the public wall bucket, then mark approved --
-  const ext = (sub.storage_path.split('.').pop() || 'jpg').toLowerCase();
+  // Extension is re-derived from the sanitized name and constrained to a
+  // short alphanumeric token before it is used in the destination filename.
+  const extMatch = /^[a-z0-9]{1,8}$/.exec((srcName.split('.').pop() || '').toLowerCase());
+  const ext = extMatch ? extMatch[0] : 'jpg';
   const dest = `approved-${sub.id}.${ext}`;
 
   try {
-    const file = await storage.get('submissions', sub.storage_path);
+    const file = await storage.get('submissions', srcName);
     if (!file) return json(res, 404, { error: 'The uploaded file is missing.' });
 
     await storage.put('wall', dest, file.buffer, file.type);
     await sb.update('photo_submissions', { id }, { ...stamp, status: 'approved', wall_path: dest });
-    await storage.remove('submissions', sub.storage_path).catch(e => {
+    await storage.remove('submissions', srcName).catch(e => {
       console.warn('[moderate] could not clear source file', e.message);
     });
 

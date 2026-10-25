@@ -31,7 +31,7 @@ const ORDER = {
   items: [{ product_id: 'aaaa-1111', name: 'Archive T-shirt', price_paise: 99900, qty: 1 }],
   subtotal_paise: 99900, shipping_paise: 7900, total_paise: 107800,
   payment_method: 'razorpay', payment_status: 'pending', status: 'new',
-  stripe_session_id: 'order_rzp_1',
+  razorpay_order_id: 'order_rzp_1',   // provider-specific column (never stripe_session_id)
 };
 
 const updates = [];   // { match, patch } for every PATCH to /rest/v1/orders
@@ -48,10 +48,19 @@ globalThis.fetch = async (url, opts = {}) => {
     return new Response(JSON.stringify([currentOrder]), { status: 200 });
   }
   if (u.includes('/rest/v1/orders') && method === 'PATCH') {
+    // PostgREST match values carry the operator prefix (eq.X) — strip it so
+    // the simulated CAS compares real column values.
     const match = Object.fromEntries(
-      new URL(u).searchParams.toString().split('&').map(kv => kv.split('=').map(decodeURIComponent))
+      new URL(u).searchParams.toString().split('&').map(kv => {
+        const [k, v] = kv.split('=').map(decodeURIComponent);
+        return [k, String(v).startsWith('eq.') ? String(v).slice(3) : v];
+      })
     );
     const patch = JSON.parse(opts.body);
+    // Simulate PostgREST's conditional UPDATE: zero rows unless every match
+    // column equals the stored value (pending -> paid exactly once).
+    const rows = currentOrder && Object.entries(match).every(([k, v]) => currentOrder[k] === v);
+    if (!rows) return new Response(JSON.stringify([]), { status: 200 });
     updates.push({ match, patch });
     currentOrder = { ...currentOrder, ...patch };
     return new Response(JSON.stringify([{ ...currentOrder }]), { status: 200 });
@@ -132,7 +141,9 @@ reset();
     r.status === 200 && updates.length === 1 && p.payment_status === 'paid',
     `status ${r.status}, patches ${JSON.stringify(updates.map(u => u.patch))}`);
   check('sets the order status to confirmed', p && p.status === 'confirmed');
-  check('stores the razorpay order id', p && p.stripe_session_id === 'order_rzp_1');
+  check('stores the razorpay order id in its own column',
+    p && p.razorpay_order_id === 'order_rzp_1' && !('stripe_session_id' in (p || {})) || false,
+    JSON.stringify(p));
   check('sends a receipt to the buyer',
     sentEmails.some(e => (Array.isArray(e.to) ? e.to[0] : e.to) === 'asha@example.com'));
   check('alerts the owner',

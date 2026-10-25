@@ -1,0 +1,30 @@
+# Security gate for every push and pull request:
+#   1. npm ci          — install exactly the committed lockfile
+#   2. npm run check   — JS syntax, JSON configs, no stray inline scripts
+#   3. npm test        — hermetic suite (orders, webhooks, payments, XSS
+#                        helpers, image validation, cron) — no network
+#
+# The live RLS suite (npm run test:live) needs production credentials and
+# is intentionally NOT part of CI; run it manually before releases.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test

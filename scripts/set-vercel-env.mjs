@@ -36,7 +36,7 @@ for (const line of raw.split(/\r?\n/)) {
   env[t.slice(0, i).trim()] = t.slice(i + 1).trim();
 }
 
-const SECRET = new Set(['SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'RESEND_API_KEY', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET']);
+const SECRET = new Set(['SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'RESEND_API_KEY', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'CRON_SECRET']);
 
 // key → value. Omit anything not present or deliberately deferred.
 const WANTED = [
@@ -52,6 +52,7 @@ const WANTED = [
   'RAZORPAY_KEY_SECRET',
   'RAZORPAY_WEBHOOK_SECRET',
   'SITE_URL',
+  'CRON_SECRET',
 ];
 
 const api = async (path, opts = {}) => {

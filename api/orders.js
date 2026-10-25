@@ -11,15 +11,30 @@
 // Prices are ALWAYS re-read from the database. The browser sends only
 // product ids and quantities, so a tampered client cannot set its own price.
 
-import { env, sb, sendEmail, json, makeRef, inr, rateLimit, clientIp } from './_lib.js';
+import { env, sb, sendEmail, json, makeRef, inr, rateLimit, clientIp, reserveStock, restoreStock, bodyTooLarge } from './_lib.js';
 
 const SHIPPING_PAISE = Number(process.env.SHIPPING_PAISE ?? 7900);
 const MAX_QTY = 20;
+const MAX_LINES = 30;
+const MAX_TOTAL_QTY = 100;
+const MAX_LINE_PAISE = 2_000_000_000; // int4 ceiling in the database
 
 function bad(res, msg) { return json(res, 400, { error: msg }); }
 
+/** Payment could not be started: cancel the fresh order (still pending) and
+ *  give the reserved stock back, so abandoned attempts never linger. */
+async function abandonOrder(reference, tracked) {
+  try {
+    await sb.update('orders', { reference, payment_status: 'pending' }, { status: 'cancelled' });
+  } catch (e) {
+    console.error('[orders] cancel failed', e.message);
+  }
+  await restoreStock(tracked);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+  if (bodyTooLarge(req)) return json(res, 413, { error: 'Payload too large.' });
 
   // Razorpay has its own route: it must create the Razorpay order first so the
   // browser can open the modal with a real order_id. A client still posting
@@ -38,7 +53,7 @@ export default async function handler(req, res) {
   // Throttle before doing any work: an order row also emails the owner, so
   // an unthrottled endpoint is an email-flood and quota-burn vector.
   // ORDER_RATE_LIMIT: orders per IP per 10 minutes; <= 0 disables.
-  const rl = rateLimit('orders', clientIp(req), Number(process.env.ORDER_RATE_LIMIT ?? 12));
+  const rl = await rateLimit('orders', clientIp(req), process.env.ORDER_RATE_LIMIT, 12);
   if (!rl.ok) {
     res.setHeader('Retry-After', String(rl.retryAfter));
     return json(res, 429, { error: 'Too many orders from this device. Please try again in a few minutes.' });
@@ -62,16 +77,18 @@ export default async function handler(req, res) {
       : 'cod';
 
   if (!name || name.length > 80) return bad(res, 'Please enter your name.');
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'Please enter a valid email.');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return bad(res, 'Please enter a valid email.');
   if (!line1 || line1.length > 200) return bad(res, 'Please enter your address.');
-  if (!city || !state) return bad(res, 'Please enter your city and state.');
+  if (line2.length > 200) return bad(res, 'Address line 2 is too long.');
+  if (!city || city.length > 80) return bad(res, 'Please enter your city.');
+  if (!state || state.length > 80) return bad(res, 'Please enter your state.');
   if (!/^\d{6}$/.test(pincode)) return bad(res, 'PIN code must be 6 digits.');
   if (phone && !/^[\d\s+\-()]{6,15}$/.test(phone)) return bad(res, 'Please enter a valid phone number.');
 
   // --- validate cart against the database -------------------------
   const raw = Array.isArray(body.items) ? body.items : [];
   if (!raw.length) return bad(res, 'Your cart is empty.');
-  if (raw.length > 30) return bad(res, 'Too many distinct items in one order.');
+  if (raw.length > MAX_LINES) return bad(res, 'Too many distinct items in one order.');
 
   const ids = [...new Set(raw.map(i => String(i.product_id)).filter(Boolean))];
   if (!ids.length) return bad(res, 'Your cart is empty.');
@@ -86,7 +103,9 @@ export default async function handler(req, res) {
 
   const byId = new Map(products.filter(p => p.active).map(p => [p.id, p]));
   const items = [];
+  const tracked = []; // [{id, qty}] for products with a stock counter
   let subtotal = 0;
+  let totalQty = 0;
 
   for (const line of raw) {
     const p = byId.get(String(line.product_id));
@@ -94,33 +113,55 @@ export default async function handler(req, res) {
     const qty = Math.floor(Number(line.qty));
     if (!Number.isFinite(qty) || qty < 1 || qty > MAX_QTY) return bad(res, `Quantity for ${p.name} is invalid.`);
     if (p.stock != null && qty > p.stock) return bad(res, `Only ${p.stock} of ${p.name} left in stock.`);
+    totalQty += qty;
+    if (totalQty > MAX_TOTAL_QTY) return bad(res, 'That is too many items in one order.');
     subtotal += p.price_paise * qty;
     items.push({ product_id: p.id, name: p.name, price_paise: p.price_paise, qty });
+    if (p.stock != null) tracked.push({ id: p.id, qty });
+  }
+  if (!Number.isSafeInteger(subtotal) || subtotal > MAX_LINE_PAISE) {
+    return bad(res, 'That order total is too large.');
   }
 
   const shipping = subtotal >= 199900 ? 0 : SHIPPING_PAISE; // free over ₹1,999
   const total = subtotal + shipping;
-  const reference = makeRef();
 
-  // --- store the order --------------------------------------------
+  // --- atomic inventory reservation --------------------------------
+  // reserve_stock() decrements in SQL with a stock >= qty predicate, so two
+  // concurrent orders can never both take the last unit.
+  const reserved = await reserveStock(tracked);
+  if (reserved === 'insufficient') return json(res, 409, { error: 'That item just sold out. Please adjust your cart.' });
+  if (reserved === 'error') return json(res, 500, { error: 'Could not reach the shop. Please try again shortly.' });
+
+  // --- store the order (reference collision → fresh code, max 3 tries) -
   const order = {
-    reference, name, email, phone: phone || null,
+    name, email, phone: phone || null,
     address_line1: line1, address_line2: line2 || null, city, state, pincode,
     items, subtotal_paise: subtotal, shipping_paise: shipping, total_paise: total,
     payment_method: payment, payment_status: 'pending', status: 'new',
   };
 
   let saved;
-  try {
-    [saved] = await sb.insert('orders', order);
-  } catch (e) {
-    console.error('[orders] insert failed', e);
-    return json(res, 500, { error: 'Could not save your order. Please try again.' });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    order.reference = makeRef();
+    try {
+      [saved] = await sb.insert('orders', order);
+      break;
+    } catch (e) {
+      if (/duplicate key|23505/i.test(String(e.message)) && attempt < 2) continue;
+      console.error('[orders] insert failed', e);
+      await restoreStock(tracked);
+      return json(res, 500, { error: 'Could not save your order. Please try again.' });
+    }
   }
+  const reference = saved.reference;
 
   // --- Stripe path --------------------------------------------------
   if (payment === 'stripe') {
-    if (!env.stripeKey) return json(res, 503, { error: 'Online payment is not configured yet. Please choose cash on delivery.' });
+    if (!env.stripeKey) {
+      await abandonOrder(reference, tracked);
+      return json(res, 503, { error: 'Online payment is not configured yet. Please choose cash on delivery.' });
+    }
     try {
       const params = new URLSearchParams();
       params.set('mode', 'payment');
@@ -148,16 +189,19 @@ export default async function handler(req, res) {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: params.toString(),
+        signal: AbortSignal.timeout(10000),
       });
       const session = await r.json();
       if (!r.ok) {
         console.error('[orders] stripe error', session.error?.message);
+        await abandonOrder(reference, tracked);
         return json(res, 502, { error: 'Payment could not be started. Please try again or choose cash on delivery.' });
       }
       await sb.update('orders', { reference }, { stripe_session_id: session.id });
       return json(res, 200, { ok: true, reference, url: session.url });
     } catch (e) {
       console.error('[orders] stripe exception', e);
+      await abandonOrder(reference, tracked);
       return json(res, 502, { error: 'Payment could not be started. Please try again.' });
     }
   }

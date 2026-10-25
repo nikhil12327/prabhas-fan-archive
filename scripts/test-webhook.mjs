@@ -23,7 +23,7 @@ const { default: handler } = await import('../api/stripe-webhook.js');
 
 // ---- fixtures ------------------------------------------------------
 const ORDER = {
-  reference: 'PA-TEST1', name: 'Asha Rao', email: 'asha@example.com', phone: '9876543210',
+  reference: 'PA-TEST2', name: 'Asha Rao', email: 'asha@example.com', phone: '9876543210',
   address_line1: '12 Temple Street', address_line2: null, city: 'Hyderabad',
   state: 'Telangana', pincode: '500001',
   items: [{ product_id: 'aaaa-1111', name: 'Archive T-shirt', price_paise: 99900, qty: 1 }],
@@ -33,19 +33,35 @@ const ORDER = {
 
 const updates = [];   // { match, patch } for every PATCH to /rest/v1/orders
 const sentEmails = [];
+let currentOrder = { ...ORDER }; // mutable: CAS tests flip payment_status
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   const method = (opts.method || 'GET').toUpperCase();
 
+  // SELECT by reference (the handler binds the event to our stored row first)
+  if (u.includes('/rest/v1/orders') && method === 'GET') {
+    return new Response(JSON.stringify(currentOrder ? [currentOrder] : []), { status: 200 });
+  }
   if (u.includes('/rest/v1/orders') && method === 'PATCH') {
+    // PostgREST match values carry the operator prefix (eq.X) — strip it so
+    // the simulated CAS compares real column values.
     const match = Object.fromEntries(
-      new URL(u).searchParams.toString().split('&').map(kv => kv.split('=').map(decodeURIComponent))
+      new URL(u).searchParams.toString().split('&').map(kv => {
+        const [k, v] = kv.split('=').map(decodeURIComponent);
+        return [k, String(v).startsWith('eq.') ? String(v).slice(3) : v];
+      })
     );
     const patch = JSON.parse(opts.body);
+    // Simulate PostgREST's conditional UPDATE: the patch lands only when
+    // every match column equals the stored value (this is what makes the
+    // pending -> paid transition atomic).
+    const rows = currentOrder && Object.entries(match).every(([k, v]) => currentOrder[k] === v);
+    if (!rows) return new Response(JSON.stringify([]), { status: 200 });
     updates.push({ match, patch });
-    return new Response(JSON.stringify([{ ...ORDER, ...patch }]), { status: 200 });
+    currentOrder = { ...currentOrder, ...patch };
+    return new Response(JSON.stringify([{ ...currentOrder }]), { status: 200 });
   }
   if (u.includes('api.resend.com')) {
     sentEmails.push(JSON.parse(opts.body));
@@ -67,11 +83,14 @@ function sign(payload, ts = Math.floor(Date.now() / 1000)) {
   return `t=${ts},v1=${v1}`;
 }
 
-/** POST an event through the real handler with a real signature. */
-function send(event, { header } = {}) {
+/** POST an event through the real handler with a real signature.
+ *  `ts` backdates the signature to exercise the replay window. */
+function send(event, { header, ts } = {}) {
   const payload = JSON.stringify(event);
   const req = Readable.from([Buffer.from(payload)]);
-  req.headers = { 'stripe-signature': header === undefined ? sign(payload) : header };
+  req.headers = {
+    'stripe-signature': header !== undefined ? header : sign(payload, ts || Math.floor(Date.now() / 1000)),
+  };
   req.method = 'POST';
 
   return new Promise(resolve => {
@@ -89,12 +108,16 @@ function send(event, { header } = {}) {
   });
 }
 
-const ev = (type, { payment_status, reference = 'PA-TEST1', id = 'cs_test_1' } = {}) => ({
+const ev = (type, { payment_status, reference = 'PA-TEST2', id = 'cs_test_1' } = {}) => ({
   type,
   data: { object: { id, payment_status, metadata: { order_reference: reference } } },
 });
 
-function reset() { updates.length = 0; sentEmails.length = 0; }
+function reset() {
+  updates.length = 0;
+  sentEmails.length = 0;
+  currentOrder = { ...ORDER };
+}
 
 console.log('\napi/stripe-webhook.js\n');
 
@@ -175,6 +198,67 @@ reset();
   const r = await send({ type: 'checkout.session.completed', data: { object: { id: 'cs_x', payment_status: 'paid', metadata: {} } } });
   check('a session without order_reference is tolerated', r.status === 200 && updates.length === 0,
     `status ${r.status}, updates ${updates.length}`);
+}
+
+// 9. REPLAY WINDOW: a captured signature older than the tolerance is refused
+reset();
+{
+  const staleTs = Math.floor(Date.now() / 1000) - 3600;
+  const r = await send(ev('checkout.session.completed', { payment_status: 'paid' }),
+    { ts: staleTs });
+  check('a replayed signature outside the tolerance window is rejected',
+    r.status === 400 && updates.length === 0,
+    `status ${r.status}, updates ${updates.length}`);
+}
+
+// 10. SESSION BINDING: an event for a different session never touches the order
+reset();
+{
+  currentOrder = { ...ORDER, stripe_session_id: 'cs_expected_1' };
+  const r = await send(ev('checkout.session.completed', { payment_status: 'paid', id: 'cs_attacker_9' }));
+  check('a mismatched Stripe session is acknowledged but ignored',
+    r.status === 200 && updates.length === 0,
+    `status ${r.status}, updates ${JSON.stringify(updates.map(u => u.patch))}`);
+  check('a mismatched session sends no email', sentEmails.length === 0);
+}
+
+// 11. DOUBLE DELIVERY: Stripe retries; the second identical event must not
+//     fulfil or email again (the conditional update finds 0 rows).
+reset();
+{
+  const first = await send(ev('checkout.session.completed', { payment_status: 'paid' }));
+  const second = await send(ev('checkout.session.completed', { payment_status: 'paid' }));
+  const paidPatches = updates.filter(u => u.patch.payment_status === 'paid');
+  check('the first delivery fulfils once', paidPatches.length === 1,
+    `patches ${JSON.stringify(updates.map(u => u.patch))}`);
+  check('a replayed delivery finds nothing to do',
+    first.status === 200 && second.status === 200 && paidPatches.length === 1);
+  check('the buyer is emailed exactly once',
+    sentEmails.filter(e => (Array.isArray(e.to) ? e.to[0] : e.to) === 'asha@example.com').length === 1);
+}
+
+// 12. AMOUNT BINDING: a session whose total differs from the order is ignored
+reset();
+{
+  const payload = JSON.stringify({
+    type: 'checkout.session.completed',
+    data: { object: { id: 'cs_test_1', payment_status: 'paid', currency: 'inr',
+      amount_total: 100, metadata: { order_reference: 'PA-TEST2' } } },
+  });
+  const req = Readable.from([Buffer.from(payload)]);
+  req.headers = { 'stripe-signature': (() => {
+    const ts = Math.floor(Date.now() / 1000);
+    const v1 = crypto.createHmac('sha256', SECRET).update(`${ts}.${payload}`).digest('hex');
+    return `t=${ts},v1=${v1}`;
+  })() };
+  req.method = 'POST';
+  const status = await new Promise(resolve => {
+    const res = { statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k] = v; },
+      end() { resolve(this.statusCode); } };
+    handler(req, res);
+  });
+  check('a mismatched amount total never fulfils', status === 200 && updates.length === 0,
+    `status ${status}, updates ${updates.length}`);
 }
 
 globalThis.fetch = realFetch;

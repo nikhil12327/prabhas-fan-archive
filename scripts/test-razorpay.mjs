@@ -26,6 +26,10 @@ const capturedOrders = [];
 const razorpayCalls = [];
 const orderUpdates = [];
 const sentEmails = [];
+let overrideRow;              // set by tests to control the SELECT result
+let paymentApiFail = false;   // simulate Razorpay being unreachable
+let paymentApiResponse = null; // simulate a payment that is NOT captured
+let paymentApiCalls = 0;
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opts = {}) => {
@@ -44,6 +48,9 @@ globalThis.fetch = async (url, opts = {}) => {
     return new Response(JSON.stringify([{ ...body, id: 'order-1' }]), { status: 201 });
   }
   if (u.includes('/rest/v1/orders') && method === 'GET') {
+    if (overrideRow !== undefined) {
+      return new Response(JSON.stringify(overrideRow ? [overrideRow] : []), { status: 200 });
+    }
     const m = /reference=eq\.([^&]+)/.exec(u);
     const reference = m ? decodeURIComponent(m[1]) : '';
     const stored = capturedOrders.find(o => o.reference === reference);
@@ -55,6 +62,7 @@ globalThis.fetch = async (url, opts = {}) => {
       subtotal_paise: PRODUCT_A.price_paise, shipping_paise: 7900,
       total_paise: PRODUCT_A.price_paise + 7900,
       payment_method: 'razorpay', payment_status: 'pending', status: 'new',
+      razorpay_order_id: 'order_rzp_1',
     };
     return new Response(JSON.stringify([row]), { status: 200 });
   }
@@ -65,6 +73,15 @@ globalThis.fetch = async (url, opts = {}) => {
     const patch = JSON.parse(opts.body);
     orderUpdates.push({ match, patch });
     return new Response(JSON.stringify([{ ...patch }]), { status: 200 });
+  }
+  if (u.includes('api.razorpay.com/v1/payments/')) {
+    paymentApiCalls++;
+    if (paymentApiFail) return new Response('{}', { status: 500 });
+    const id = u.split('/').pop();
+    return new Response(JSON.stringify(paymentApiResponse || {
+      id, order_id: 'order_rzp_1', status: 'captured', currency: 'INR',
+      amount: 99900 + 7900,
+    }), { status: 200 });
   }
   if (u.includes('api.razorpay.com/v1/orders')) {
     razorpayCalls.push(JSON.parse(opts.body));
@@ -123,6 +140,10 @@ console.log('\\napi/create-order.js\\n');
   check('stores the order with payment_method razorpay', capturedOrders.at(-1).payment_method === 'razorpay');
   check('stored order is pending until verified',
     capturedOrders.at(-1).payment_status === 'pending' && capturedOrders.at(-1).status === 'new');
+  check('records the razorpay order id in its own column',
+    orderUpdates.some(u => u.patch && u.patch.razorpay_order_id === 'order_rzp_1') &&
+    !orderUpdates.some(u => u.patch && 'stripe_session_id' in u.patch),
+    JSON.stringify(orderUpdates.map(u => u.patch)));
 }
 
 // 2. TAMPERED PRICE ignored
@@ -160,7 +181,8 @@ console.log('\\napi/verify-payment.js\\n');
 
 // 5. valid signature marks the order paid
 {
-  orderUpdates.length = 0; sentEmails.length = 0;
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = undefined;
+  paymentApiFail = false; paymentApiResponse = null;
   const sig = crypto.createHmac('sha256', 'razorpay-secret-test')
     .update('order_rzp_1|pay_1').digest('hex');
   const r = await call(verifyPayment, {
@@ -174,6 +196,103 @@ console.log('\\napi/verify-payment.js\\n');
     `status ${r.status}, patches ${JSON.stringify(orderUpdates.map(u => u.patch))}`);
   check('sets the order status to confirmed', p && p.status === 'confirmed');
   check('sends a receipt to the buyer', sentEmails.some(e => (Array.isArray(e.to) ? e.to[0] : e.to) === 'asha@example.com'));
+  check('the payment was verified against Razorpay itself', paymentApiCalls > 0);
+}
+
+const signPair = (o = 'order_rzp_1', p = 'pay_1') =>
+  crypto.createHmac('sha256', 'razorpay-secret-test').update(`${o}|${p}`).digest('hex');
+
+const baseVerify = {
+  razorpay_order_id: 'order_rzp_1', razorpay_payment_id: 'pay_1',
+  razorpay_signature: signPair(), reference: 'PA-TEST2',
+};
+const row = (patch = {}) => ({
+  reference: 'PA-TEST2', name: 'Asha Rao', email: 'asha@example.com', phone: '9876543210',
+  address_line1: '12 Temple Street', address_line2: null, city: 'Hyderabad',
+  state: 'Telangana', pincode: '500001',
+  items: [{ product_id: PRODUCT_A.id, name: PRODUCT_A.name, price_paise: PRODUCT_A.price_paise, qty: 1 }],
+  subtotal_paise: 99900, shipping_paise: 7900, total_paise: 107800,
+  payment_method: 'razorpay', payment_status: 'pending', status: 'new',
+  razorpay_order_id: 'order_rzp_1',
+  ...patch,
+});
+
+// 6. an order with NO stored razorpay order id can never be confirmed
+{
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = row({ razorpay_order_id: null });
+  const r = await call(verifyPayment, baseVerify);
+  check('rejects an order with no stored razorpay order id', r.status === 400,
+    `got ${r.status}: ${r.body.error}`);
+  check('the unlinked order is not marked paid', orderUpdates.length === 0);
+  check('no email is sent for an unlinked order', sentEmails.length === 0);
+}
+
+// 7. the signature is for a DIFFERENT razorpay order than this order stored
+{
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = row();
+  const r = await call(verifyPayment, {
+    ...baseVerify, razorpay_order_id: 'order_rzp_9999',
+    razorpay_signature: signPair('order_rzp_9999'),
+  });
+  check('rejects a payment belonging to a different order', r.status === 400,
+    `got ${r.status}: ${r.body.error}`);
+  check('a mismatched order id writes nothing', orderUpdates.length === 0);
+}
+
+// 8. server-side verification: payment not captured yet → no paid state
+{
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = row();
+  paymentApiFail = false;
+  paymentApiResponse = { id: 'pay_1', order_id: 'order_rzp_1', status: 'authorized', currency: 'INR', amount: 107800 };
+  const r = await call(verifyPayment, baseVerify);
+  check('an uncaptured payment is never marked paid',
+    r.status === 400 && orderUpdates.length === 0,
+    `status ${r.status}, updates ${orderUpdates.length}`);
+  check('no receipt for an uncaptured payment', sentEmails.length === 0);
+  paymentApiResponse = null;
+}
+
+// 9. server-side verification: wrong amount → no paid state
+{
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = row();
+  paymentApiResponse = { id: 'pay_1', order_id: 'order_rzp_1', status: 'captured', currency: 'INR', amount: 100 };
+  const r = await call(verifyPayment, baseVerify);
+  check('an amount mismatch is rejected',
+    r.status === 400 && orderUpdates.length === 0,
+    `status ${r.status}, updates ${orderUpdates.length}`);
+  paymentApiResponse = null;
+}
+
+// 10. wrong currency → no paid state
+{
+  orderUpdates.length = 0; overrideRow = row();
+  paymentApiResponse = { id: 'pay_1', order_id: 'order_rzp_1', status: 'captured', currency: 'USD', amount: 107800 };
+  const r = await call(verifyPayment, baseVerify);
+  check('a non-INR payment is rejected', r.status === 400 && orderUpdates.length === 0,
+    `status ${r.status}`);
+  paymentApiResponse = null;
+}
+
+// 11. Razorpay unreachable → FAIL CLOSED (503, order stays pending)
+{
+  orderUpdates.length = 0; sentEmails.length = 0; overrideRow = row();
+  paymentApiFail = true;
+  const r = await call(verifyPayment, baseVerify);
+  check('unverifiable payment fails closed with 503',
+    r.status === 503 && orderUpdates.length === 0 && sentEmails.length === 0,
+    `status ${r.status}, updates ${orderUpdates.length}`);
+  paymentApiFail = false;
+}
+
+// 12. already-paid order: acknowledged, never rewritten or re-emailed
+{
+  orderUpdates.length = 0; sentEmails.length = 0;
+  overrideRow = row({ payment_status: 'paid', status: 'confirmed' });
+  const r = await call(verifyPayment, baseVerify);
+  check('an already-paid order is acknowledged idempotently',
+    r.status === 200 && r.body.already === true && orderUpdates.length === 0 && sentEmails.length === 0,
+    `status ${r.status}, updates ${orderUpdates.length}, emails ${sentEmails.length}`);
+  overrideRow = undefined;
 }
 
 globalThis.fetch = realFetch;

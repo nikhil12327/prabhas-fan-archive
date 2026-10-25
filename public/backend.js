@@ -14,10 +14,21 @@
   const q = (s, r) => (r || document).querySelector(s);
   const qa = (s, r) => [...(r || document).querySelectorAll(s)];
 
+  // Canonical output encoders (public/sanitize.js, loaded first). If that
+  // file ever fails to load we refuse to render connected features rather
+  // than fall back to unescaped HTML.
+  const S = window.ArchiveSanitize;
+  if (ONLINE && !S) {
+    console.error('[archive] sanitize.js missing — connected UI disabled for safety');
+    return;
+  }
+  const esc = S ? S.esc : (s => String(s == null ? '' : s));
+  const safeUrl = S ? S.safeUrl : (() => '');
+  const safePath = S ? S.safePath : (() => '');
+  const num = S ? S.num : (n => (Number.isFinite(Number(n)) ? Number(n) : 0));
+
   /** ₹ from paise, without float drift. */
   const inr = p => '₹' + (p / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
-    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortDate = iso => new Date(iso).toLocaleDateString('en-IN',
     { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -55,20 +66,26 @@
     if (!ONLINE) { grid.innerHTML = '<p class="empty">Connect Supabase to open submissions.</p>'; return; }
 
     // --- approved wall ---
+    // Reads the public-safe VIEW: id/name/caption/wall_path of APPROVED
+    // rows only. Emails, storage paths and moderation fields are not
+    // reachable from the browser at all (the base table has no anon SELECT).
     try {
-      const { data, error } = await db.from('photo_submissions')
-        .select('id, name, caption, wall_path')
-        .eq('status', 'approved')
-        .order('reviewed_at', { ascending: false })
+      const { data, error } = await db.from('photo_wall')
+        .select('id, name, caption, wall_path, created_at')
+        .order('created_at', { ascending: false })
         .limit(60);
       if (error) throw error;
       grid.innerHTML = data.length
-        ? data.map(p => `
+        ? data.map(p => {
+            const src = safeUrl(pubUrl('wall', safePath(p.wall_path)));
+            if (!src) return '';
+            return `
           <figure class="pwcard">
-            <img src="${pubUrl('wall', p.wall_path)}"
+            <img src="${esc(src)}"
                  alt="Photo submitted by ${esc(p.name)}" loading="lazy">
             <figcaption>${p.caption ? esc(p.caption) : ''}<span>${esc(p.name)}</span></figcaption>
-          </figure>`).join('')
+          </figure>`;
+          }).filter(Boolean).join('')
         : '<p class="empty">No approved photos yet — be the first.</p>';
     } catch (e) {
       console.error('[wall] load failed', e);
@@ -86,14 +103,22 @@
 
       if (!f) return flash(msg, 'Choose a photo first.', 'err');
       if (!name || !email) return flash(msg, 'Name and email are required.', 'err');
-      if (!f.type.startsWith('image/')) return flash(msg, 'That file is not an image.', 'err');
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
+        return flash(msg, 'Photos must be JPG, PNG or WebP.', 'err');
+      }
       if (f.size > 8 * 1024 * 1024) return flash(msg, 'Images must be under 8 MB.', 'err');
 
       const btn = q('#pwsubmit', form);
       btn.disabled = true; btn.textContent = 'Uploading…';
       try {
-        const safe = f.name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-|-$/g, '') || 'photo.jpg';
+        // Server-side rules mirrored here for UX: no traversal, image
+        // extension only. The server still re-validates the actual BYTES
+        // (api/_image.js) before anything is ever published.
+        const safe = (f.name.toLowerCase().replace(/\.\.+/g, '.').replace(/[^a-z0-9.]+/g, '-')
+          .replace(/^-|-$/g, '') || 'photo')
+          .replace(/\.(jpg|jpeg|png|webp)$/, '') + '.jpg';
         const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+        if (!safePath(path)) throw new Error('unsafe upload name');
 
         const up = await db.storage.from('submissions').upload(path, f, {
           contentType: f.type, upsert: false,
@@ -127,9 +152,14 @@
 
     const load = async () => {
       try {
+        // No client-side status filter: anon's column grant on wishes is
+        // (id, name, message, created_at), so filtering on `status` fails
+        // with permission denied. Approval is enforced by the
+        // wishes_public_read policy (approved OR is_admin()) — the real
+        // boundary: a direct PostgREST caller gets the same approved-only
+        // rows, and pending wishes never leave the database.
         const { data, error } = await db.from('wishes')
           .select('name, message, created_at')
-          .eq('status', 'approved')
           .order('created_at', { ascending: false })
           .limit(30);
         if (error) throw error;
@@ -179,7 +209,7 @@
       if (error) throw error;
       box.innerHTML = data.length
         ? `<ol class="lb">${data.map((r, i) => `<li><b>${i + 1}</b><span>${esc(r.name)}</span>
-             <em>${r.score}/${r.total}</em></li>`).join('')}</ol>`
+             <em>${num(r.score)}/${num(r.total)}</em></li>`).join('')}</ol>`
         : '<p class="empty">No scores yet — take the quiz and top the board.</p>';
     } catch (e) {
       console.error('[lb] load failed', e);
@@ -219,14 +249,18 @@
         if (!name) return flash(msgEl, 'Enter a name.', 'err');
         if (!m) return flash(msgEl, 'Score could not be read.', 'err');
         try {
-          const { error } = await db.from('quiz_scores')
-            .insert({ name, score: +m[1], total: +m[2] });
+          // Server-validated path: the RPC range-checks the score, enforces
+          // the per-IP throttle and is the ONLY way to write a score
+          // (direct table INSERT was revoked).
+          const { error } = await db.rpc('submit_quiz_score', {
+            p_name: name, p_score: +m[1], p_total: +m[2],
+          });
           if (error) throw error;
           form.remove();
           loadLeaderboard();
         } catch (e) {
-          console.error('[lb] insert failed', e);
-          flash(msgEl, 'Could not save your score.', 'err');
+          console.error('[lb] submit failed', e);
+          flash(msgEl, (e && e.message) || 'Could not save your score.', 'err');
         }
       });
     };
@@ -254,8 +288,13 @@
     }
 
     try {
+      // Explicit columns: anon's grant on merch_products is column-limited
+      // (created_at is admin-only), so `select('*')` — which expands to every
+      // column — fails with permission denied. Request exactly the public
+      // catalogue fields the page renders.
       const { data, error } = await db.from('merch_products')
-        .select('*').eq('active', true).order('sort_order', { ascending: true });
+        .select('id, name, description, price_paise, image_path, active, stock, sort_order')
+        .eq('active', true).order('sort_order', { ascending: true });
       if (error) throw error;
       PRODUCTS = data || [];
     } catch (e) {
@@ -270,7 +309,7 @@
     }
 
     grid.innerHTML = PRODUCTS.map(p => {
-      const url = p.image_path ? pubUrl('merch', p.image_path) : '';
+      const url = p.image_path ? safeUrl(pubUrl('merch', safePath(p.image_path))) : '';
       const img = url
         ? `<div class="im"><img src="${esc(url)}" alt="${esc(p.name)}" loading="lazy"></div>`
         : `<div class="im ph"><span aria-hidden="true">${esc((p.name || '?').trim().slice(0, 1).toUpperCase())}</span></div>`;
@@ -496,18 +535,28 @@
            <p><span>UPI ID</span><code>${esc(vpa)}</code></p>
            <p><span>Amount</span><b>${inr(totalPaise)}</b></p>
            <p><span>Order</span><b>${esc(ref)}</b></p>
-           <a class="opt" href="${link}">Open UPI app</a>
+           <a class="opt" href="${esc(safeUrl(link))}">Open UPI app</a>
          </div>
        </div>
        <p>Your order ships once the payment lands — usually within a minute. A confirmation email is on its way.</p>`;
     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  /* Coming back from Stripe: /?order=PA-XXXXX&paid=1#/merch */
+  /* Coming back from Stripe: /?order=PA-XXXXX&paid=1#/merch
+     NOTE: `paid=1` is a convenience marker for the redirect only — it is
+     NEVER treated as proof of payment. This renders the neutral
+     "received, confirming" wording; the definitive paid state comes from
+     /api/stripe-webhook after Stripe's signed callback. */
   function handleReturn() {
     const p = new URLSearchParams(location.search);
     const ref = p.get('order');
     if (!ref) return;
+    if (!/^PA-[A-Z2-9]{5}$/.test(ref)) {
+      p.delete('order'); p.delete('paid'); p.delete('cancelled');
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+      return;
+    }
     writeCart({});
     showConfirmation(ref, p.get('cancelled') === '1' ? 'cancelled' : 'stripe');
     p.delete('order'); p.delete('paid'); p.delete('cancelled');

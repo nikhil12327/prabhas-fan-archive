@@ -16,7 +16,7 @@
 // secret into RAZORPAY_WEBHOOK_SECRET.
 
 import crypto from 'node:crypto';
-import { env, sb, sendEmail, json, inr } from './_lib.js';
+import { env, sb, sendEmail, json, inr, bodyTooLarge } from './_lib.js';
 
 // Razorpay sends the signature in the `x-razorpay-signature` header and needs
 // the unparsed body, so JSON parsing is disabled for this route.
@@ -43,6 +43,7 @@ function verify(signature, payload, secret) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+  if (bodyTooLarge(req)) return json(res, 413, { error: 'Payload too large.' });
 
   let payload;
   try { payload = (await rawBody(req)).toString('utf8'); }
@@ -77,11 +78,10 @@ export default async function handler(req, res) {
   const paymentId = String(payment.id || '');
   if (!orderId) return json(res, 200, { received: true });
 
-  // Failures only mark the order failed. Do this BEFORE the lookup so a
-  // failed retry of a previously-paid order cannot clobber it: we resolve the
-  // row first and check its state below.
+  // Look the order up by its PROVIDER-SPECIFIC column. stripe_session_id is
+  // no longer overloaded with Razorpay ids (migration 20261025).
   let rows;
-  try { rows = await sb.select('orders', { eq: { stripe_session_id: orderId } }); }
+  try { rows = await sb.select('orders', { eq: { razorpay_order_id: orderId } }); }
   catch (e) { console.error('[rzp-webhook] lookup failed', e); return json(res, 500, { error: 'Lookup failed' }); }
 
   const order = rows[0];
@@ -94,16 +94,16 @@ export default async function handler(req, res) {
   const reference = order.reference;
 
   if (type === 'payment.failed') {
-    // Never downgrade an order that is already paid — a later failed retry
-    // for a different attempt must not flip a settled order.
-    if (order.payment_status === 'paid') return json(res, 200, { received: true });
+    // Conditional pending → failed: a failed retry for a later attempt can
+    // never downgrade an order that is already paid (0 rows = nothing to do).
     try {
-      await sb.update('orders', { reference }, { payment_status: 'failed', stripe_session_id: orderId });
+      const flipped = await sb.update('orders', { reference, payment_status: 'pending' },
+        { payment_status: 'failed' });
+      if (flipped.length) console.log('[rzp-webhook] payment failed', reference, paymentId);
     } catch (e) {
       console.error('[rzp-webhook] failed-mark update errored', e);
       return json(res, 500, { error: 'Update failed' });
     }
-    console.log('[rzp-webhook] payment failed', reference, paymentId);
     return json(res, 200, { received: true });
   }
 
@@ -114,25 +114,34 @@ export default async function handler(req, res) {
   // send the emails once.
   if (order.payment_status === 'paid') return json(res, 200, { received: true, already: true });
 
-  // Sanity check the captured amount against what we charged. Razorpay amounts
-  // are in paise, same as ours. A mismatch means a tampered or partial payment
+  // Sanity checks against what we charged. Razorpay amounts are in paise,
+  // same as ours. A mismatch means a tampered, partial or foreign payment
   // and must not fulfil.
+  if (String(payment.currency || '').toUpperCase() !== 'INR') {
+    console.error('[rzp-webhook] currency mismatch for', reference, payment.currency);
+    return json(res, 200, { received: true });
+  }
   if (payment.amount != null && Number(payment.amount) !== Number(order.total_paise)) {
     console.error('[rzp-webhook] amount mismatch for', reference,
       'expected', order.total_paise, 'got', payment.amount);
     return json(res, 200, { received: true });
   }
 
-  // Money has actually landed: mark paid and notify.
+  // Money has actually landed: atomic pending → paid, then notify.
+  let updated;
   try {
-    await sb.update('orders', { reference }, {
+    updated = await sb.update('orders', { reference, payment_status: 'pending' }, {
       payment_status: 'paid',
       status: 'confirmed',
-      stripe_session_id: orderId,
+      razorpay_order_id: orderId,
     });
   } catch (e) {
     console.error('[rzp-webhook] update failed', e);
     return json(res, 500, { error: 'Update failed' });
+  }
+  if (!updated.length) {
+    // Someone else fulfilled first — acknowledge without emailing again.
+    return json(res, 200, { received: true, already: true });
   }
 
   const rowsText = (order.items || [])
